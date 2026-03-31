@@ -1,0 +1,54 @@
+# Ignore build artifacts
+**/bin/
+**/obj/
+**/out/
+**/publish/
+
+# Ignore IDE and editor files
+**/.vs/
+**/.vscode/
+**/.idea/
+**/.DS_Store
+*.suo
+*.user
+*.userosscache
+*.sln.docstates
+
+# Ignore frontend files (not needed for backend deployment)
+frontend/
+docs/
+database/
+
+# Ignore version control
+.git/
+.gitignore
+.gitattributes
+
+# Ignore environment and secret files
+**/*.Development.json
+**/*.local.json
+**/appsettings.Development.json
+**/.env
+**/.env.local
+
+# Ignore test files
+**/TestResults/
+**/*.Tests/
+
+# Ignore documentation
+README.md
+*.md
+
+# Ignore package restore files
+**/packages/
+**/node_modules/
+
+# Ignore temporary files
+**/tmp/
+**/temp/
+**/*.tmp
+**/*.log
+
+# Ignore utility projects (not needed in production)
+backend/PasswordHasher/
+backend/UpdatePassword/

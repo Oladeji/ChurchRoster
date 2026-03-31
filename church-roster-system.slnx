@@ -1,0 +1,8 @@
+<Solution>
+  <Folder Name="/backend/">
+    <Project Path="backend/ChurchRoster.Api/ChurchRoster.Api.csproj" />
+    <Project Path="backend/ChurchRoster.Application/ChurchRoster.Application.csproj" />
+    <Project Path="backend/ChurchRoster.Core/ChurchRoster.Core.csproj" />
+    <Project Path="backend/ChurchRoster.Infrastructure/ChurchRoster.Infrastructure.csproj" />
+  </Folder>
+</Solution>
