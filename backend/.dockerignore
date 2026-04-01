@@ -1,24 +1,49 @@
-**/.classpath
-**/.dockerignore
+# Ignore build artifacts
+**/bin/
+**/obj/
+**/out/
+**/publish/
+
+# Ignore IDE and editor files
+**/.vs/
+**/.vscode/
+**/.idea/
+**/.DS_Store
+*.suo
+*.user
+*.userosscache
+*.sln.docstates
+
+# Ignore version control
+.git/
+.gitignore
+.gitattributes
+
+# Ignore environment and secret files
+**/*.Development.json
+**/*.local.json
+**/appsettings.Development.json
 **/.env
-**/.git
-**/.gitignore
-**/.project
-**/.settings
-**/.toolstarget
-**/.vs
-**/.vscode
-**/*.*proj.user
-**/*.dbmdl
-**/*.jfm
-**/bin
-**/charts
-**/docker-compose*
-**/compose*
-**/Dockerfile*
-**/node_modules
-**/npm-debug.log
-**/obj
-**/secrets.dev.yaml
-**/values.dev.yaml
+**/.env.local
+
+# Ignore test files
+**/TestResults/
+**/*.Tests/
+
+# Ignore documentation
 README.md
+*.md
+
+# Ignore package restore files
+**/packages/
+**/node_modules/
+
+# Ignore temporary files
+**/tmp/
+**/temp/
+**/*.tmp
+**/*.log
+
+# Ignore utility projects (not needed in production)
+PasswordHasher/
+UpdatePassword/

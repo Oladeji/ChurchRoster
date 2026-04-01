@@ -67,7 +67,7 @@ Ensure your `.gitignore` excludes sensitive files:
 - **Name:** `church-roster-api` (or your preferred name)
 - **Region:** Choose closest to your location (e.g., Oregon, Frankfurt)
 - **Branch:** `main`
-- **Root Directory:** Leave blank (Dockerfile is at root)
+- **Root Directory:** `backend`
 - **Environment:** `Docker`
 - **Dockerfile Path:** `./Dockerfile`
 

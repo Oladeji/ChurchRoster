@@ -406,3 +406,7 @@ Thumbs.db
 *.db
 *.sqlite
 *.sqlite3
+
+# Docker Compose files (contain sensitive connection strings)
+docker-compose.yml
+docker-compose.*.yml

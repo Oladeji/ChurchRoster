@@ -1,6 +1,7 @@
-using Scalar.AspNetCore;
 using Asp.Versioning;
 using ChurchRoster.Api;
+using Microsoft.AspNetCore.HttpOverrides;
+using Scalar.AspNetCore;
 var builder = WebApplication.CreateBuilder(args);
 // Add PORT support for Render
 var port = Environment.GetEnvironmentVariable("PORT") ?? "8080";
@@ -9,9 +10,15 @@ builder.WebHost.UseUrls($"http://0.0.0.0:{port}");
 // Learn more about configuring OpenAPI at https://aka.ms/aspnet/openapi
 builder.Services.AddOpenApi();
 builder.Services.AddAPIServices(builder.Configuration);
-
+builder.Services.Configure<ForwardedHeadersOptions>(options =>
+{
+    options.ForwardedHeaders = ForwardedHeaders.XForwardedProto;
+});
 var app = builder.Build();
-
+app.UseForwardedHeaders(new ForwardedHeadersOptions
+{
+ForwardedHeaders = ForwardedHeaders.XForwardedProto
+});
 // Configure the HTTP request pipeline.
 //if (app.Environment.IsDevelopment())
 {
