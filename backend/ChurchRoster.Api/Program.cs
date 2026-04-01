@@ -1,6 +1,7 @@
 using Asp.Versioning;
 using ChurchRoster.Api;
 using Microsoft.AspNetCore.HttpOverrides;
+using Microsoft.Extensions.Options;
 using Scalar.AspNetCore;
 var builder = WebApplication.CreateBuilder(args);
 // Add PORT support for Render
@@ -13,11 +14,19 @@ builder.Services.AddAPIServices(builder.Configuration);
 builder.Services.Configure<ForwardedHeadersOptions>(options =>
 {
     options.ForwardedHeaders = ForwardedHeaders.XForwardedProto;
+   // options.KnownIPNetworks.Clear();  // ✅ Trust all proxies (needed for Render)
+    //options.k.Clear();     // ✅
 });
 var app = builder.Build();
+app.Use(async (context, next) =>
+{
+    context.Request.Scheme = "https";
+    await next();
+});
 app.UseForwardedHeaders(new ForwardedHeadersOptions
 {
 ForwardedHeaders = ForwardedHeaders.XForwardedProto
+   
 });
 // Configure the HTTP request pipeline.
 //if (app.Environment.IsDevelopment())
