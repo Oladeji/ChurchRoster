@@ -1,10 +1,11 @@
 ﻿using Asp.Versioning;
-using Microsoft.AspNetCore.Http.Features;
-using Microsoft.Extensions.Options;
-using Microsoft.EntityFrameworkCore;
-using ChurchRoster.Infrastructure.Data;
 using ChurchRoster.Application.Interfaces;
 using ChurchRoster.Application.Services;
+using ChurchRoster.Infrastructure.Data;
+using Microsoft.AspNetCore.Cors.Infrastructure;
+using Microsoft.AspNetCore.Http.Features;
+using Microsoft.EntityFrameworkCore;
+using Microsoft.Extensions.Options;
 
 namespace ChurchRoster.Api
 {
@@ -60,7 +61,29 @@ namespace ChurchRoster.Api
                     option.SubstituteApiVersionInUrl = true;
 
                 });
+            services.AddCorsFromOrigin(configuration);
             return services;
         }
+
+
+        private static IServiceCollection AddCorsFromOrigin(this IServiceCollection services, IConfiguration configuration)
+        {
+            //  var origins = configuration.GetSection(CorsConstants.CorsOrigins_PermittedClients).Get<string[]>();
+            var origins = new string[] { 
+            "localhost:3000","http://localhost:3000","https://localhost:3000",
+            };
+            services.AddCors(options =>
+            {
+                options.AddPolicy("CorsConstants.Cors_Policy", builder =>
+                {
+                    builder.AllowAnyMethod()
+                        .AllowAnyHeader()
+                        .WithOrigins(origins)
+                        .AllowCredentials();
+                });
+            });
+            return services;
+        }
+
     }
 }

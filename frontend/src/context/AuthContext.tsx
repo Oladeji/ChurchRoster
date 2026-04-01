@@ -1,5 +1,5 @@
-import React, { createContext, useState, useContext, useEffect, ReactNode } from 'react';
-import { User } from '../types';
+import React, { createContext, useState, useContext, useEffect, type ReactNode } from 'react';
+import type { User } from '../types';
 import authService from '../services/auth.service';
 
 interface AuthContextType {
@@ -37,23 +37,29 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
   }, []);
 
   const login = async (email: string, password: string) => {
-    try {
-      const response = await authService.login({ email, password });
-      setUser(response.user);
-    } catch (error) {
-      console.error('Login failed:', error);
-      throw error;
-    }
+    const response = await authService.login({ email, password });
+    const userData: User = {
+      userId: response.userId,
+      name: response.name,
+      email: response.email,
+      phone: '',
+      role: response.role,
+      isActive: true
+    };
+    setUser(userData);
   };
 
   const register = async (name: string, email: string, phone: string, password: string) => {
-    try {
-      const response = await authService.register({ name, email, phone, password });
-      setUser(response.user);
-    } catch (error) {
-      console.error('Registration failed:', error);
-      throw error;
-    }
+    const response = await authService.register({ name, email, phone, password });
+    const userData: User = {
+      userId: response.userId,
+      name: response.name,
+      email: response.email,
+      phone,
+      role: response.role,
+      isActive: true
+    };
+    setUser(userData);
   };
 
   const logout = () => {

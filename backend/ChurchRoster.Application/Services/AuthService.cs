@@ -7,6 +7,7 @@ using ChurchRoster.Core.Entities;
 using ChurchRoster.Infrastructure.Data;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Configuration;
+using Microsoft.Extensions.Logging;
 using Microsoft.IdentityModel.Tokens;
 
 namespace ChurchRoster.Application.Services
@@ -15,37 +16,67 @@ namespace ChurchRoster.Application.Services
     {
         private readonly AppDbContext _context;
         private readonly IConfiguration _configuration;
+        private readonly ILogger<AuthService> _logger;
 
-        public AuthService(AppDbContext context, IConfiguration configuration)
+        public AuthService(AppDbContext context, IConfiguration configuration, ILogger<AuthService> logger)
         {
             _context = context;
             _configuration = configuration;
+            _logger = logger;
         }
 
         public async Task<AuthResponse?> LoginAsync(LoginRequest request)
         {
-            var user = await _context.Users
-                .FirstOrDefaultAsync(u => u.Email == request.Email);
+            try
+            {
+                _logger.LogInformation("Login attempt for email: {Email}", request.Email);
 
-            if (user == null || !user.IsActive)
-                return null;
+                var user = await _context.Users
+                    .FirstOrDefaultAsync(u => u.Email == request.Email);
 
-            if (!VerifyPassword(request.Password, user.PasswordHash))
-                return null;
+                if (user == null)
+                {
+                    _logger.LogWarning("Login failed: User not found for email: {Email}", request.Email);
+                    return null;
+                }
 
-            var token = GenerateJwtToken(user.UserId, user.Email, user.Role);
+                if (!user.IsActive)
+                {
+                    _logger.LogWarning("Login failed: User is not active for email: {Email}", request.Email);
+                    return null;
+                }
 
-            var expirationMinutes = int.Parse(_configuration["JwtSettings:ExpirationInMinutes"] ?? "1440");
-            var expiresAt = DateTime.UtcNow.AddMinutes(expirationMinutes);
+                _logger.LogDebug("User found: {UserId}, verifying password...", user.UserId);
 
-            return new AuthResponse(
-                user.UserId,
-                user.Name,
-                user.Email,
-                user.Role,
-                token,
-                expiresAt
-            );
+                if (!VerifyPassword(request.Password, user.PasswordHash))
+                {
+                    _logger.LogWarning("Login failed: Invalid password for email: {Email}", request.Email);
+                    return null;
+                }
+
+                _logger.LogDebug("Password verified, generating JWT token...");
+
+                var token = GenerateJwtToken(user.UserId, user.Email, user.Role);
+
+                var expirationMinutes = int.Parse(_configuration["JwtSettings:ExpirationInMinutes"] ?? "1440");
+                var expiresAt = DateTime.UtcNow.AddMinutes(expirationMinutes);
+
+                _logger.LogInformation("Login successful for user: {UserId}, email: {Email}", user.UserId, request.Email);
+
+                return new AuthResponse(
+                    user.UserId,
+                    user.Name,
+                    user.Email,
+                    user.Role,
+                    token,
+                    expiresAt
+                );
+            }
+            catch (Exception ex)
+            {
+                _logger.LogError(ex, "Error during login for email: {Email}", request.Email);
+                throw;
+            }
         }
 
         public async Task<AuthResponse?> RegisterAsync(RegisterRequest request)
@@ -91,36 +122,60 @@ namespace ChurchRoster.Application.Services
 
         public string GenerateJwtToken(int userId, string email, string role)
         {
-            var jwtSettings = _configuration.GetSection("JwtSettings");
-            var secretKey = jwtSettings["SecretKey"] ?? throw new InvalidOperationException("JWT SecretKey not configured");
-            var issuer = jwtSettings["Issuer"];
-            var audience = jwtSettings["Audience"];
-            var expirationMinutes = int.Parse(jwtSettings["ExpirationInMinutes"] ?? "1440");
-
-            var securityKey = new SymmetricSecurityKey(Encoding.UTF8.GetBytes(secretKey));
-            var credentials = new SigningCredentials(securityKey, SecurityAlgorithms.HmacSha256);
-
-            var claims = new[]
+            try
             {
-                new Claim(JwtRegisteredClaimNames.Sub, userId.ToString()),
-                new Claim(JwtRegisteredClaimNames.Email, email),
-                new Claim(ClaimTypes.Role, role),
-                new Claim(JwtRegisteredClaimNames.Jti, Guid.NewGuid().ToString())
-            };
+                _logger.LogDebug("Generating JWT token for user: {UserId}, email: {Email}, role: {Role}", userId, email, role);
 
-            var token = new JwtSecurityToken(
-                issuer: issuer,
-                audience: audience,
-                claims: claims,
-                expires: DateTime.UtcNow.AddMinutes(expirationMinutes),
-                signingCredentials: credentials
-            );
+                var jwtSettings = _configuration.GetSection("JwtSettings");
 
-            return new JwtSecurityTokenHandler().WriteToken(token);
+                var secretKey = jwtSettings["SecretKey"];
+                if (string.IsNullOrEmpty(secretKey))
+                {
+                    _logger.LogError("JWT SecretKey is not configured!");
+                    throw new InvalidOperationException("JWT SecretKey not configured");
+                }
+
+                var issuer = jwtSettings["Issuer"];
+                var audience = jwtSettings["Audience"];
+                var expirationMinutes = int.Parse(jwtSettings["ExpirationInMinutes"] ?? "1440");
+
+                _logger.LogDebug("JWT Settings - Issuer: {Issuer}, Audience: {Audience}, Expiration: {ExpirationMinutes} minutes", 
+                    issuer, audience, expirationMinutes);
+
+                var securityKey = new SymmetricSecurityKey(Encoding.UTF8.GetBytes(secretKey));
+                var credentials = new SigningCredentials(securityKey, SecurityAlgorithms.HmacSha256);
+
+                var claims = new[]
+                {
+                    new Claim(JwtRegisteredClaimNames.Sub, userId.ToString()),
+                    new Claim(JwtRegisteredClaimNames.Email, email),
+                    new Claim(ClaimTypes.Role, role),
+                    new Claim(JwtRegisteredClaimNames.Jti, Guid.NewGuid().ToString())
+                };
+
+                var token = new JwtSecurityToken(
+                    issuer: issuer,
+                    audience: audience,
+                    claims: claims,
+                    expires: DateTime.UtcNow.AddMinutes(expirationMinutes),
+                    signingCredentials: credentials
+                );
+
+                var tokenString = new JwtSecurityTokenHandler().WriteToken(token);
+                _logger.LogDebug("JWT token generated successfully");
+
+                return tokenString;
+            }
+            catch (Exception ex)
+            {
+                _logger.LogError(ex, "Error generating JWT token for user: {UserId}", userId);
+                throw;
+            }
         }
 
         public string HashPassword(string password)
         {
+            _logger.LogDebug("Hashing password");
             return BCrypt.Net.BCrypt.HashPassword(password);
         }
 
@@ -128,10 +183,14 @@ namespace ChurchRoster.Application.Services
         {
             try
             {
-                return BCrypt.Net.BCrypt.Verify(password, passwordHash);
+                _logger.LogDebug("Verifying password");
+                var result = BCrypt.Net.BCrypt.Verify(password, passwordHash);
+                _logger.LogDebug("Password verification result: {Result}", result);
+                return result;
             }
-            catch
+            catch (Exception ex)
             {
+                _logger.LogError(ex, "Error verifying password");
                 return false;
             }
         }

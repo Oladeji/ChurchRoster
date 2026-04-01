@@ -1,5 +1,5 @@
 import apiService from './api.service';
-import { Task } from '../types';
+import type { Task } from '../types';
 
 class TaskService {
   async getTasks(): Promise<Task[]> {

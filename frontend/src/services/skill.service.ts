@@ -1,5 +1,5 @@
 import apiService from './api.service';
-import { Skill } from '../types';
+import type { Skill } from '../types';
 
 class SkillService {
   async getSkills(): Promise<Skill[]> {

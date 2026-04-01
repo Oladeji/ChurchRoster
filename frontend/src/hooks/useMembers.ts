@@ -1,6 +1,6 @@
 import { useState, useEffect } from 'react';
 import memberService from '../services/member.service';
-import { User } from '../types';
+import type { User } from '../types';
 
 export const useMembers = () => {
   const [members, setMembers] = useState<User[]>([]);

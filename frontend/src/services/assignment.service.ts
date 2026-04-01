@@ -1,5 +1,5 @@
 import apiService from './api.service';
-import { Assignment, AssignmentFilter, ApiResponse } from '../types';
+import type { Assignment, AssignmentFilter } from '../types';
 
 class AssignmentService {
   async getAssignments(filter?: AssignmentFilter): Promise<Assignment[]> {

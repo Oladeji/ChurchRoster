@@ -1,5 +1,5 @@
 import apiService from './api.service';
-import { User, Skill, UserSkill } from '../types';
+import type { User, Skill, UserSkill } from '../types';
 
 class MemberService {
   async getMembers(): Promise<User[]> {

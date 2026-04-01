@@ -1,6 +1,6 @@
 import { useState, useEffect } from 'react';
 import assignmentService from '../services/assignment.service';
-import { Assignment, AssignmentFilter } from '../types';
+import type { Assignment, AssignmentFilter } from '../types';
 
 export const useAssignments = (filter?: AssignmentFilter) => {
   const [assignments, setAssignments] = useState<Assignment[]>([]);

@@ -21,21 +21,40 @@ namespace ChurchRoster.Api.Endpoints.V1
                 .Produces(StatusCodes.Status409Conflict);
         }
 
-        private static async Task<IResult> Login(LoginRequest request, IAuthService authService)
+        private static async Task<IResult> Login(LoginRequest request, IAuthService authService, ILoggerFactory loggerFactory)
         {
-            if (string.IsNullOrWhiteSpace(request.Email) || string.IsNullOrWhiteSpace(request.Password))
+            var logger = loggerFactory.CreateLogger("AuthEndpoints");
+
+            try
             {
-                return Results.BadRequest(new { message = "Email and password are required" });
+                logger.LogInformation("Login endpoint called for email: {Email}", request.Email);
+
+                if (string.IsNullOrWhiteSpace(request.Email) || string.IsNullOrWhiteSpace(request.Password))
+                {
+                    logger.LogWarning("Login failed: Email or password is empty");
+                    return Results.BadRequest(new { message = "Email and password are required" });
+                }
+
+                var response = await authService.LoginAsync(request);
+
+                if (response == null)
+                {
+                    logger.LogWarning("Login failed for email: {Email}", request.Email);
+                    return Results.Unauthorized();
+                }
+
+                logger.LogInformation("Login successful for email: {Email}", request.Email);
+                return Results.Ok(response);
             }
-
-            var response = await authService.LoginAsync(request);
-
-            if (response == null)
+            catch (Exception ex)
             {
-                return Results.Unauthorized();
+                logger.LogError(ex, "Exception in Login endpoint for email: {Email}", request.Email);
+                return Results.Problem(
+                    detail: ex.Message,
+                    statusCode: 500,
+                    title: "Internal Server Error"
+                );
             }
-
-            return Results.Ok(response);
         }
 
         private static async Task<IResult> Register(RegisterRequest request, IAuthService authService)

@@ -75,8 +75,12 @@ export interface RegisterRequest {
 }
 
 export interface AuthResponse {
+  userId: number;
+  name: string;
+  email: string;
+  role: 'Admin' | 'Member';
   token: string;
-  user: User;
+  expiresAt: string;
 }
 
 // API Response Types
