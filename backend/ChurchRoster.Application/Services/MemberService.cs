@@ -1,4 +1,5 @@
 using ChurchRoster.Application.DTOs.Members;
+using ChurchRoster.Application.DTOs.Skills;
 using ChurchRoster.Application.Interfaces;
 using ChurchRoster.Core.Entities;
 using ChurchRoster.Infrastructure.Data;
@@ -149,6 +150,115 @@ namespace ChurchRoster.Application.Services
             return members.Select(MapToDto);
         }
 
+        public async Task<IEnumerable<SkillDto>> GetMemberSkillsAsync(int userId)
+        {
+            var member = await _context.Users
+                .Include(u => u.UserSkills)
+                    .ThenInclude(us => us.Skill)
+                .FirstOrDefaultAsync(u => u.UserId == userId);
+
+            if (member == null)
+                return Enumerable.Empty<SkillDto>();
+
+            return member.UserSkills
+                .Select(us => new SkillDto(
+                    us.Skill.SkillId,
+                    us.Skill.SkillName,
+                    us.Skill.Description,
+                    us.Skill.IsActive,
+                    us.Skill.CreatedAt
+                ))
+                .ToList();
+        }
+
+        public async Task<bool> AssignSkillToMemberAsync(int userId, int skillId)
+        {
+            // Check if member exists
+            var memberExists = await _context.Users.AnyAsync(u => u.UserId == userId);
+            if (!memberExists)
+                return false;
+
+            // Check if skill exists
+            var skillExists = await _context.Skills.AnyAsync(s => s.SkillId == skillId);
+            if (!skillExists)
+                return false;
+
+            // Check if already assigned
+            var alreadyAssigned = await _context.UserSkills
+                .AnyAsync(us => us.UserId == userId && us.SkillId == skillId);
+
+            if (alreadyAssigned)
+                return false;
+
+            // Create assignment
+            var userSkill = new UserSkill
+            {
+                UserId = userId,
+                SkillId = skillId,
+                AssignedDate = DateTime.UtcNow
+            };
+
+            _context.UserSkills.Add(userSkill);
+            await _context.SaveChangesAsync();
+
+            return true;
+        }
+
+        public async Task<bool> RemoveSkillFromMemberAsync(int userId, int skillId)
+        {
+            var userSkill = await _context.UserSkills
+                .FirstOrDefaultAsync(us => us.UserId == userId && us.SkillId == skillId);
+
+            if (userSkill == null)
+                return false;
+
+            _context.UserSkills.Remove(userSkill);
+            await _context.SaveChangesAsync();
+
+            return true;
+        }
+
+        public async Task<IEnumerable<MemberDto>> GetQualifiedMembersForTaskAsync(int taskId)
+        {
+            // Get the task and its required skill
+            var task = await _context.Tasks
+                .Include(t => t.RequiredSkill)
+                .FirstOrDefaultAsync(t => t.TaskId == taskId);
+
+            if (task == null)
+                return Enumerable.Empty<MemberDto>();
+
+            // If no skill required, return all active members
+            if (task.RequiredSkillId == null)
+            {
+                return await GetActiveMembersAsync();
+            }
+
+            // Get members with the required skill
+            var qualifiedMembers = await _context.Users
+                .Include(u => u.UserSkills)
+                    .ThenInclude(us => us.Skill)
+                .Where(u => u.IsActive && 
+                           u.UserSkills.Any(us => us.SkillId == task.RequiredSkillId))
+                .OrderBy(u => u.Name)
+                .ToListAsync();
+
+            return qualifiedMembers.Select(MapToDto);
+        }
+
+        public async Task<bool> UpdateDeviceTokenAsync(int userId, string deviceToken)
+        {
+            var user = await _context.Users.FindAsync(userId);
+            if (user == null)
+                return false;
+
+            user.DeviceToken = deviceToken;
+            user.UpdatedAt = DateTime.UtcNow;
+            await _context.SaveChangesAsync();
+
+            return true;
+        }
+
         private MemberDto MapToDto(User member)
         {
             return new MemberDto(
@@ -160,7 +270,8 @@ namespace ChurchRoster.Application.Services
                 member.MonthlyLimit,
                 member.IsActive,
                 member.CreatedAt,
-                member.UserSkills.Select(us => us.Skill.SkillName).ToList()
+                member.UserSkills.Select(us => us.Skill.SkillName).ToList(),
+                member.DeviceToken
             );
         }
 

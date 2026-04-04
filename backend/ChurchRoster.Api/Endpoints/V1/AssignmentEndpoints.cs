@@ -43,7 +43,20 @@ namespace ChurchRoster.Api.Endpoints.V1
                 .WithName("UpdateAssignmentStatus")
                 .Produces<AssignmentDto>(StatusCodes.Status200OK)
                 .Produces(StatusCodes.Status404NotFound)
-                .Produces(StatusCodes.Status400BadRequest);
+                .Produces(StatusCodes.Status400BadRequest)
+                .RequireAuthorization();
+
+            group.MapPost("/{id:int}/accept", AcceptAssignment)
+                .WithName("AcceptAssignment")
+                .Produces<AssignmentDto>(StatusCodes.Status200OK)
+                .Produces(StatusCodes.Status404NotFound)
+                .RequireAuthorization();
+
+            group.MapPost("/{id:int}/reject", RejectAssignment)
+                .WithName("RejectAssignment")
+                .Produces<AssignmentDto>(StatusCodes.Status200OK)
+                .Produces(StatusCodes.Status404NotFound)
+                .RequireAuthorization();
 
             group.MapDelete("/{id:int}", DeleteAssignment)
                 .WithName("DeleteAssignment")
@@ -81,7 +94,11 @@ namespace ChurchRoster.Api.Endpoints.V1
             return Results.Ok(assignments);
         }
 
-        private static async Task<IResult> CreateAssignment(CreateAssignmentRequest request, IAssignmentService assignmentService)
+        private static async Task<IResult> CreateAssignment(
+            CreateAssignmentRequest request, 
+            IAssignmentService assignmentService,
+            INotificationService notificationService,
+            IMemberService memberService)
         {
             // For now, assume the assigned by user ID is 1 (admin)
             // TODO: Get this from the authenticated user's claims
@@ -111,6 +128,53 @@ namespace ChurchRoster.Api.Endpoints.V1
                 return Results.BadRequest(new { message = "Failed to create assignment" });
             }
 
+            // Get user and device token BEFORE starting background task to avoid disposed context
+            var assignedUser = await memberService.GetMemberByIdAsync(assignment.UserId);
+
+            // Send notification asynchronously (don't wait) - pass data directly to avoid disposed context
+            if (assignedUser != null && !string.IsNullOrEmpty(assignedUser.DeviceToken))
+            {
+                var deviceToken = assignedUser.DeviceToken;
+                var userName = assignment.UserName;
+                var taskName = assignment.TaskName;
+                var eventDate = assignment.EventDate;
+                var assignmentId = assignment.AssignmentId;
+
+                _ = Task.Run(async () =>
+                {
+                    try
+                    {
+                        Console.WriteLine($"[NOTIFICATION] Starting notification process for assignment {assignmentId}");
+                        Console.WriteLine($"[NOTIFICATION] Sending to user: {userName}, task: {taskName}");
+
+                        var result = await notificationService.SendAssignmentNotificationAsync(
+                            deviceToken,
+                            userName,
+                            taskName,
+                            eventDate,
+                            assignmentId
+                        );
+
+                        if (result)
+                        {
+                            Console.WriteLine($"[NOTIFICATION] ✅ Notification sent successfully!");
+                        }
+                        else
+                        {
+                            Console.WriteLine($"[NOTIFICATION] ❌ Notification send failed");
+                        }
+                    }
+                    catch (Exception ex)
+                    {
+                        Console.WriteLine($"[NOTIFICATION] ❌ Exception: {ex.GetType().Name}: {ex.Message}");
+                    }
+                });
+            }
+            else
+            {
+                Console.WriteLine($"[NOTIFICATION] ⚠️ User {assignment.UserName} (ID: {assignment.UserId}) has no device token - notification skipped");
+            }
+
             // Return with warnings if any
             if (validation.Warnings.Any())
             {
@@ -135,7 +199,11 @@ namespace ChurchRoster.Api.Endpoints.V1
             return Results.Ok(validation);
         }
 
-        private static async Task<IResult> UpdateAssignmentStatus(int id, UpdateAssignmentStatusRequest request, IAssignmentService assignmentService)
+        private static async Task<IResult> UpdateAssignmentStatus(
+            int id, 
+            UpdateAssignmentStatusRequest request, 
+            IAssignmentService assignmentService,
+            INotificationService notificationService)
         {
             if (string.IsNullOrWhiteSpace(request.Status))
             {
@@ -155,6 +223,88 @@ namespace ChurchRoster.Api.Endpoints.V1
             {
                 return Results.NotFound();
             }
+
+            // Send status update notification to admin asynchronously
+            if (request.Status == "Accepted" || request.Status == "Rejected")
+            {
+                _ = Task.Run(async () =>
+                {
+                    try
+                    {
+                        await notificationService.SendStatusUpdateNotificationAsync(id, request.Status);
+                    }
+                    catch (Exception ex)
+                    {
+                        Console.WriteLine($"Failed to send status update notification: {ex.Message}");
+                    }
+                });
+            }
+
+            return Results.Ok(assignment);
+        }
+
+        private static async Task<IResult> AcceptAssignment(
+            int id, 
+            IAssignmentService assignmentService,
+            INotificationService notificationService)
+        {
+            var request = new UpdateAssignmentStatusRequest(
+                Status: "Accepted",
+                RejectionReason: null
+            );
+
+            var assignment = await assignmentService.UpdateAssignmentStatusAsync(id, request);
+
+            if (assignment == null)
+            {
+                return Results.NotFound();
+            }
+
+            // Send status update notification to admin asynchronously
+            _ = Task.Run(async () =>
+            {
+                try
+                {
+                    await notificationService.SendStatusUpdateNotificationAsync(id, "Accepted");
+                }
+                catch (Exception ex)
+                {
+                    Console.WriteLine($"Failed to send status update notification: {ex.Message}");
+                }
+            });
+
+            return Results.Ok(assignment);
+        }
+
+        private static async Task<IResult> RejectAssignment(
+            int id, 
+            IAssignmentService assignmentService,
+            INotificationService notificationService)
+        {
+            var request = new UpdateAssignmentStatusRequest(
+                Status: "Rejected",
+                RejectionReason: "Declined from notification"
+            );
+
+            var assignment = await assignmentService.UpdateAssignmentStatusAsync(id, request);
+
+            if (assignment == null)
+            {
+                return Results.NotFound();
+            }
+
+            // Send status update notification to admin asynchronously
+            _ = Task.Run(async () =>
+            {
+                try
+                {
+                    await notificationService.SendStatusUpdateNotificationAsync(id, "Rejected");
+                }
+                catch (Exception ex)
+                {
+                    Console.WriteLine($"Failed to send status update notification: {ex.Message}");
+                }
+            });
 
             return Results.Ok(assignment);
         }

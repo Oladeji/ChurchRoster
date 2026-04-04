@@ -6,6 +6,11 @@ class SkillService {
     return await apiService.get<Skill[]>('/skills');
   }
 
+  // Alias for convenience
+  async getAll(): Promise<Skill[]> {
+    return this.getSkills();
+  }
+
   async getSkillById(id: number): Promise<Skill> {
     return await apiService.get<Skill>(`/skills/${id}`);
   }

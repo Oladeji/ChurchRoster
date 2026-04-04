@@ -1,0 +1,289 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Service Worker Diagnostics</title>
+  <style>
+    body {
+      font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+      max-width: 800px;
+      margin: 50px auto;
+      padding: 20px;
+      background: #f5f5f5;
+    }
+    .card {
+      background: white;
+      border-radius: 8px;
+      padding: 20px;
+      margin-bottom: 20px;
+      box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+    }
+    h1 { color: #333; margin-top: 0; }
+    h2 { color: #666; font-size: 18px; margin-top: 0; }
+    .status { 
+      display: inline-block;
+      padding: 4px 12px;
+      border-radius: 4px;
+      font-size: 14px;
+      font-weight: bold;
+    }
+    .status.good { background: #4caf50; color: white; }
+    .status.bad { background: #f44336; color: white; }
+    .status.warn { background: #ff9800; color: white; }
+    button {
+      background: #6366f1;
+      color: white;
+      border: none;
+      padding: 10px 20px;
+      border-radius: 6px;
+      cursor: pointer;
+      font-size: 16px;
+      margin: 5px;
+    }
+    button:hover { background: #4f46e5; }
+    pre {
+      background: #f5f5f5;
+      padding: 15px;
+      border-radius: 4px;
+      overflow-x: auto;
+      font-size: 13px;
+    }
+    .log {
+      background: #000;
+      color: #0f0;
+      padding: 15px;
+      border-radius: 4px;
+      font-family: 'Courier New', monospace;
+      font-size: 12px;
+      max-height: 300px;
+      overflow-y: auto;
+      margin-top: 10px;
+    }
+    .info { color: #2196f3; }
+    .success { color: #4caf50; }
+    .error { color: #f44336; }
+  </style>
+</head>
+<body>
+  <h1>🔧 Service Worker Diagnostics</h1>
+
+  <div class="card">
+    <h2>Service Worker Status</h2>
+    <div id="sw-status"></div>
+    <button onclick="checkServiceWorker()">Refresh Status</button>
+    <button onclick="updateServiceWorker()">Force Update</button>
+    <button onclick="unregisterServiceWorker()">Unregister & Reload</button>
+  </div>
+
+  <div class="card">
+    <h2>Notification Support</h2>
+    <div id="notification-support"></div>
+  </div>
+
+  <div class="card">
+    <h2>Test Background Notification</h2>
+    <p>This will simulate a background notification with action buttons.</p>
+    <button onclick="testBackgroundNotification()">Send Test Notification</button>
+    <div class="log" id="test-log"></div>
+  </div>
+
+  <div class="card">
+    <h2>Service Worker Console Logs</h2>
+    <p>Open Chrome DevTools → Application → Service Workers to see SW console logs</p>
+    <p>Or visit: <a href="chrome://serviceworker-internals/" target="_blank">chrome://serviceworker-internals/</a></p>
+  </div>
+
+  <script>
+    const log = (message, type = 'info') => {
+      const logDiv = document.getElementById('test-log');
+      const timestamp = new Date().toLocaleTimeString();
+      const className = type === 'error' ? 'error' : type === 'success' ? 'success' : 'info';
+      logDiv.innerHTML += `<div class="${className}">[${timestamp}] ${message}</div>`;
+      logDiv.scrollTop = logDiv.scrollHeight;
+    };
+
+    async function checkServiceWorker() {
+      const statusDiv = document.getElementById('sw-status');
+
+      if (!('serviceWorker' in navigator)) {
+        statusDiv.innerHTML = '<span class="status bad">NOT SUPPORTED</span><p>Service Workers are not supported in this browser.</p>';
+        return;
+      }
+
+      try {
+        const registration = await navigator.serviceWorker.getRegistration();
+
+        if (!registration) {
+          statusDiv.innerHTML = '<span class="status bad">NOT REGISTERED</span><p>No Service Worker registered.</p>';
+          return;
+        }
+
+        let status = '<span class="status good">REGISTERED</span>';
+        status += '<pre>';
+        status += `Scope: ${registration.scope}\n`;
+
+        if (registration.active) {
+          status += `Active: ${registration.active.scriptURL}\n`;
+          status += `State: ${registration.active.state}\n`;
+        }
+
+        if (registration.waiting) {
+          status += `\nWaiting: ${registration.waiting.scriptURL}\n`;
+          status += '<span class="status warn">UPDATE AVAILABLE</span> - Click "Force Update" below\n';
+        }
+
+        if (registration.installing) {
+          status += `\nInstalling: ${registration.installing.scriptURL}\n`;
+        }
+
+        status += '</pre>';
+        statusDiv.innerHTML = status;
+      } catch (error) {
+        statusDiv.innerHTML = `<span class="status bad">ERROR</span><p>${error.message}</p>`;
+      }
+    }
+
+    async function updateServiceWorker() {
+      try {
+        const registration = await navigator.serviceWorker.getRegistration();
+        if (registration) {
+          log('Checking for updates...', 'info');
+          await registration.update();
+          log('Update check complete. Refreshing status...', 'success');
+
+          if (registration.waiting) {
+            log('New version waiting. Reloading page...', 'info');
+            registration.waiting.postMessage({ type: 'SKIP_WAITING' });
+            window.location.reload();
+          } else {
+            log('Already on latest version.', 'success');
+          }
+
+          setTimeout(checkServiceWorker, 500);
+        }
+      } catch (error) {
+        log(`Error: ${error.message}`, 'error');
+      }
+    }
+
+    async function unregisterServiceWorker() {
+      if (!confirm('This will unregister the Service Worker and reload the page. Continue?')) {
+        return;
+      }
+
+      try {
+        const registration = await navigator.serviceWorker.getRegistration();
+        if (registration) {
+          await registration.unregister();
+          log('Service Worker unregistered. Reloading...', 'success');
+          setTimeout(() => window.location.reload(), 1000);
+        }
+      } catch (error) {
+        log(`Error: ${error.message}`, 'error');
+      }
+    }
+
+    async function testBackgroundNotification() {
+      log('Testing background notification...', 'info');
+
+      // Check notification permission
+      if (Notification.permission !== 'granted') {
+        log('Notification permission not granted. Requesting...', 'info');
+        const permission = await Notification.requestPermission();
+        if (permission !== 'granted') {
+          log('Permission denied. Cannot send notification.', 'error');
+          return;
+        }
+      }
+
+      // Check Service Worker
+      const registration = await navigator.serviceWorker.ready;
+      if (!registration.active) {
+        log('Service Worker not active!', 'error');
+        return;
+      }
+
+      log('Service Worker is active. Sending notification...', 'success');
+
+      // Send a notification that mimics Firebase background message
+      try {
+        await registration.showNotification('Test Assignment Notification', {
+          body: 'This is a test notification with action buttons',
+          icon: '/icons/icon-192x192.png',
+          badge: '/icons/badge-72x72.png',
+          tag: 'test-notification-' + Date.now(),
+          requireInteraction: true,
+          data: {
+            type: 'new_assignment',
+            assignmentId: '999',
+            taskName: 'Test Task',
+            eventDate: '2026-04-15',
+            url: '/my-assignments'
+          },
+          actions: [
+            { action: 'accept', title: '✓ Accept' },
+            { action: 'view', title: '👁 View Details' },
+            { action: 'dismiss', title: '✕ Dismiss' }
+          ]
+        });
+
+        log('✅ Notification sent with action buttons!', 'success');
+        log('Check your system notifications to see the buttons.', 'info');
+      } catch (error) {
+        log(`❌ Error: ${error.message}`, 'error');
+      }
+    }
+
+    function checkNotificationSupport() {
+      const supportDiv = document.getElementById('notification-support');
+      let html = '';
+
+      // Notification API
+      if ('Notification' in window) {
+        html += '<p>✅ Notification API: <span class="status good">SUPPORTED</span></p>';
+        html += `<p>Permission: <span class="status ${Notification.permission === 'granted' ? 'good' : 'warn'}">${Notification.permission.toUpperCase()}</span></p>`;
+
+        // Action buttons support
+        if ('actions' in Notification.prototype) {
+          html += '<p>✅ Action Buttons: <span class="status good">SUPPORTED</span></p>';
+        } else {
+          html += '<p>❌ Action Buttons: <span class="status bad">NOT SUPPORTED</span> (May still work in SW)</p>';
+        }
+      } else {
+        html += '<p>❌ Notification API: <span class="status bad">NOT SUPPORTED</span></p>';
+      }
+
+      // Service Worker
+      if ('serviceWorker' in navigator) {
+        html += '<p>✅ Service Worker: <span class="status good">SUPPORTED</span></p>';
+      } else {
+        html += '<p>❌ Service Worker: <span class="status bad">NOT SUPPORTED</span></p>';
+      }
+
+      // Vibration
+      if ('vibrate' in navigator) {
+        html += '<p>✅ Vibration: <span class="status good">SUPPORTED</span></p>';
+      } else {
+        html += '<p>⚠️ Vibration: <span class="status warn">NOT SUPPORTED</span> (Desktop only)</p>';
+      }
+
+      supportDiv.innerHTML = html;
+    }
+
+    // Run checks on load
+    window.addEventListener('load', () => {
+      checkServiceWorker();
+      checkNotificationSupport();
+    });
+
+    // Listen for Service Worker updates
+    if ('serviceWorker' in navigator) {
+      navigator.serviceWorker.addEventListener('controllerchange', () => {
+        log('Service Worker updated!', 'success');
+        checkServiceWorker();
+      });
+    }
+  </script>
+</body>
+</html>

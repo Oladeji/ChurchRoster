@@ -7,7 +7,9 @@
 *.user
 *.userosscache
 *.sln.docstates
-
+*.firebase-adminsdk.json
+*firebase-adminsdk.json
+firebase-adminsdk.json
 # Build results
 [Dd]ebug/
 [Dd]ebugPublic/

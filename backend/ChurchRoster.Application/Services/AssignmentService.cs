@@ -40,8 +40,13 @@ namespace ChurchRoster.Application.Services
 
         public async Task<AssignmentDto?> CreateAssignmentAsync(CreateAssignmentRequest request, int assignedByUserId)
         {
+            // Ensure EventDate is in UTC
+            var eventDateUtc = request.EventDate.Kind == DateTimeKind.Utc 
+                ? request.EventDate 
+                : DateTime.SpecifyKind(request.EventDate, DateTimeKind.Utc);
+
             // Validate the assignment
-            var validation = await ValidateAssignmentAsync(request.TaskId, request.UserId, request.EventDate, request.IsOverride);
+            var validation = await ValidateAssignmentAsync(request.TaskId, request.UserId, eventDateUtc, request.IsOverride);
 
             if (!validation.IsValid && !request.IsOverride)
             {
@@ -52,7 +57,7 @@ namespace ChurchRoster.Application.Services
             {
                 TaskId = request.TaskId,
                 UserId = request.UserId,
-                EventDate = request.EventDate,
+                EventDate = eventDateUtc,
                 Status = "Pending",
                 IsOverride = request.IsOverride,
                 AssignedBy = assignedByUserId,
@@ -108,11 +113,16 @@ namespace ChurchRoster.Application.Services
 
         public async Task<IEnumerable<AssignmentDto>> GetAssignmentsByDateAsync(DateTime eventDate)
         {
+            // Ensure eventDate is in UTC for comparison
+            var eventDateUtc = eventDate.Kind == DateTimeKind.Utc 
+                ? eventDate 
+                : DateTime.SpecifyKind(eventDate, DateTimeKind.Utc);
+
             var assignments = await _context.Assignments
                 .Include(a => a.Task)
                 .Include(a => a.User)
                 .Include(a => a.AssignedByUser)
-                .Where(a => a.EventDate.Date == eventDate.Date)
+                .Where(a => a.EventDate.Date == eventDateUtc.Date)
                 .OrderBy(a => a.Task.TaskName)
                 .ToListAsync();
 
@@ -136,6 +146,11 @@ namespace ChurchRoster.Application.Services
         {
             var errors = new List<string>();
             var warnings = new List<string>();
+
+            // Ensure eventDate is in UTC
+            var eventDateUtc = eventDate.Kind == DateTimeKind.Utc 
+                ? eventDate 
+                : DateTime.SpecifyKind(eventDate, DateTimeKind.Utc);
 
             // Check if task exists
             var task = await _context.Tasks
@@ -178,19 +193,19 @@ namespace ChurchRoster.Application.Services
             // BUSINESS RULE 2: Conflict Detection - Same Day (BR-AS-003)
             var existingAssignment = await _context.Assignments
                 .AnyAsync(a => a.UserId == userId && 
-                              a.EventDate.Date == eventDate.Date && 
+                              a.EventDate.Date == eventDateUtc.Date && 
                               a.Status != "Rejected" &&
                               a.Status != "Expired");
 
             if (existingAssignment)
             {
-                errors.Add($"User already has an assignment on {eventDate:yyyy-MM-dd}");
+                errors.Add($"User already has an assignment on {eventDateUtc:yyyy-MM-dd}");
             }
 
             // BUSINESS RULE 3: Monthly Limit Check (BR-AS-004) - Warning only
             if (user.MonthlyLimit.HasValue)
             {
-                var monthStart = new DateTime(eventDate.Year, eventDate.Month, 1);
+                var monthStart = new DateTime(eventDateUtc.Year, eventDateUtc.Month, 1, 0, 0, 0, DateTimeKind.Utc);
                 var monthEnd = monthStart.AddMonths(1).AddDays(-1);
 
                 var monthlyCount = await _context.Assignments
@@ -206,7 +221,7 @@ namespace ChurchRoster.Application.Services
             }
 
             // BUSINESS RULE 4: Past Date Check
-            if (eventDate.Date < DateTime.UtcNow.Date)
+            if (eventDateUtc.Date < DateTime.UtcNow.Date)
             {
                 errors.Add("Cannot assign tasks to past dates");
             }

@@ -1,0 +1,235 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Notification Test</title>
+    <style>
+        body {
+            font-family: Arial, sans-serif;
+            max-width: 600px;
+            margin: 50px auto;
+            padding: 20px;
+        }
+        button {
+            background: #007bff;
+            color: white;
+            border: none;
+            padding: 15px 30px;
+            font-size: 16px;
+            border-radius: 5px;
+            cursor: pointer;
+            margin: 10px 5px;
+        }
+        button:hover {
+            background: #0056b3;
+        }
+        .status {
+            padding: 15px;
+            margin: 15px 0;
+            border-radius: 5px;
+        }
+        .ok {
+            background: #d4edda;
+            color: #155724;
+        }
+        .error {
+            background: #f8d7da;
+            color: #721c24;
+        }
+        .info {
+            background: #d1ecf1;
+            color: #0c5460;
+        }
+        .log {
+            background: #000;
+            color: #0f0;
+            padding: 10px;
+            font-family: monospace;
+            font-size: 12px;
+            max-height: 400px;
+            overflow-y: auto;
+            white-space: pre-wrap;
+        }
+    </style>
+</head>
+<body>
+    <h1>🔔 Notification Test Page</h1>
+
+    <div id="status"></div>
+
+    <h2>Step 1: Check Permission</h2>
+    <button onclick="checkPermission()">Check Notification Permission</button>
+    <button onclick="requestPermission()">Request Permission</button>
+
+    <h2>Step 2: Test Notifications</h2>
+    <button onclick="testBasicNotification()">Test Basic Notification</button>
+    <button onclick="testSWNotification()">Test Service Worker Notification</button>
+    <button onclick="testNotificationWithActions()">Test with Action Buttons</button>
+
+    <h2>Console Logs:</h2>
+    <button onclick="clearLogs()">Clear Logs</button>
+    <div id="logs" class="log"></div>
+
+    <script>
+        const logsDiv = document.getElementById('logs');
+        const statusDiv = document.getElementById('status');
+
+        function addLog(message) {
+            const timestamp = new Date().toLocaleTimeString();
+            logsDiv.textContent += `[${timestamp}] ${message}\n`;
+            logsDiv.scrollTop = logsDiv.scrollHeight;
+            console.log(message);
+        }
+
+        function clearLogs() {
+            logsDiv.textContent = '';
+        }
+
+        function showStatus(message, type = 'info') {
+            statusDiv.innerHTML = `<div class="status ${type}">${message}</div>`;
+        }
+
+        function checkPermission() {
+            const permission = Notification.permission;
+            addLog(`Notification permission: ${permission}`);
+
+            if (permission === 'granted') {
+                showStatus('✅ Notification permission: GRANTED', 'ok');
+            } else if (permission === 'denied') {
+                showStatus('❌ Notification permission: DENIED - You need to reset in browser settings', 'error');
+            } else {
+                showStatus('⚠️ Notification permission: NOT ASKED YET - Click "Request Permission"', 'info');
+            }
+        }
+
+        async function requestPermission() {
+            addLog('Requesting notification permission...');
+            try {
+                const permission = await Notification.requestPermission();
+                addLog(`Permission result: ${permission}`);
+                checkPermission();
+            } catch (error) {
+                addLog(`Error requesting permission: ${error}`);
+                showStatus(`❌ Error: ${error.message}`, 'error');
+            }
+        }
+
+        function testBasicNotification() {
+            addLog('Testing basic Notification API...');
+
+            if (Notification.permission !== 'granted') {
+                addLog('❌ Permission not granted!');
+                showStatus('❌ Please grant notification permission first', 'error');
+                return;
+            }
+
+            try {
+                const notification = new Notification('Test Notification', {
+                    body: 'This is a basic test notification',
+                    icon: '/icons/icon-192x192.png'
+                });
+                addLog('✅ Basic notification created successfully');
+                showStatus('✅ Basic notification shown!', 'ok');
+            } catch (error) {
+                addLog(`❌ Failed to create basic notification: ${error}`);
+                showStatus(`❌ Error: ${error.message}`, 'error');
+            }
+        }
+
+        async function testSWNotification() {
+            addLog('Testing Service Worker notification...');
+
+            if (Notification.permission !== 'granted') {
+                addLog('❌ Permission not granted!');
+                showStatus('❌ Please grant notification permission first', 'error');
+                return;
+            }
+
+            if (!('serviceWorker' in navigator)) {
+                addLog('❌ Service Worker not supported');
+                showStatus('❌ Service Worker not supported in this browser', 'error');
+                return;
+            }
+
+            try {
+                addLog('Waiting for Service Worker to be ready...');
+                const registration = await navigator.serviceWorker.ready;
+                addLog('✅ Service Worker is ready');
+
+                await registration.showNotification('SW Test Notification', {
+                    body: 'This notification is shown via Service Worker',
+                    icon: '/icons/icon-192x192.png',
+                    badge: '/icons/badge-72x72.png',
+                    tag: 'sw-test',
+                    requireInteraction: false
+                });
+
+                addLog('✅ Service Worker notification shown successfully');
+                showStatus('✅ Service Worker notification shown!', 'ok');
+            } catch (error) {
+                addLog(`❌ Failed to show SW notification: ${error}`);
+                addLog(`Error message: ${error.message}`);
+                addLog(`Error stack: ${error.stack}`);
+                showStatus(`❌ Error: ${error.message}`, 'error');
+            }
+        }
+
+        async function testNotificationWithActions() {
+            addLog('Testing notification with action buttons...');
+
+            if (Notification.permission !== 'granted') {
+                addLog('❌ Permission not granted!');
+                showStatus('❌ Please grant notification permission first', 'error');
+                return;
+            }
+
+            if (!('serviceWorker' in navigator)) {
+                addLog('❌ Service Worker not supported');
+                showStatus('❌ Service Worker not supported in this browser', 'error');
+                return;
+            }
+
+            try {
+                addLog('Waiting for Service Worker to be ready...');
+                const registration = await navigator.serviceWorker.ready;
+                addLog('✅ Service Worker is ready');
+
+                const actions = [
+                    { action: 'accept', title: '✓ Accept' },
+                    { action: 'view', title: '👁 View Details' }
+                ];
+
+                addLog(`Creating notification with ${actions.length} action buttons`);
+
+                await registration.showNotification('Test with Actions', {
+                    body: 'This notification has action buttons!',
+                    icon: '/icons/icon-192x192.png',
+                    badge: '/icons/badge-72x72.png',
+                    tag: 'action-test',
+                    requireInteraction: true,
+                    actions: actions,
+                    data: {
+                        type: 'test',
+                        timestamp: Date.now()
+                    }
+                });
+
+                addLog('✅ Notification with action buttons shown successfully');
+                showStatus('✅ Notification with action buttons shown! Click the buttons to test.', 'ok');
+            } catch (error) {
+                addLog(`❌ Failed to show notification with actions: ${error}`);
+                addLog(`Error message: ${error.message}`);
+                addLog(`Error stack: ${error.stack}`);
+                showStatus(`❌ Error: ${error.message}`, 'error');
+            }
+        }
+
+        // Auto-check permission on load
+        window.addEventListener('load', () => {
+            addLog('Notification test page loaded');
+            checkPermission();
+        });
+    </script>
+</body>
+</html>

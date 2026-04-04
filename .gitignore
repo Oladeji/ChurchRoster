@@ -372,6 +372,10 @@ FodyWeavers.xsd
 **/.env.local
 **/.env.development
 
+# Firebase Admin SDK credentials (NEVER commit these!)
+**/firebase-adminsdk*.json
+**/firebase-service-account*.json
+
 # Utility projects (not needed in production)
 backend/PasswordHasher/
 backend/UpdatePassword/

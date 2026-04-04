@@ -6,8 +6,10 @@
   </ItemGroup>
 
   <ItemGroup>
+    <PackageReference Include="FirebaseAdmin" />
     <PackageReference Include="FluentValidation" />
     <PackageReference Include="BCrypt.Net-Next" />
+    <PackageReference Include="QuestPDF" />
     <PackageReference Include="System.IdentityModel.Tokens.Jwt" />
     <PackageReference Include="Microsoft.Extensions.Configuration" />
     <!--<PackageReference Include="AutoMapper" />-->

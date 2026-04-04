@@ -1,0 +1,272 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>System Health Check</title>
+    <script src="/config.js"></script>
+    <style>
+        body {
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+            max-width: 600px;
+            margin: 50px auto;
+            padding: 20px;
+            background: #f5f5f5;
+        }
+        .container {
+            background: white;
+            padding: 30px;
+            border-radius: 8px;
+            box-shadow: 0 2px 10px rgba(0,0,0,0.1);
+        }
+        h1 {
+            color: #333;
+            margin-bottom: 30px;
+        }
+        .check {
+            display: flex;
+            align-items: center;
+            padding: 15px;
+            margin: 10px 0;
+            border-radius: 4px;
+            background: #f9f9f9;
+        }
+        .check-icon {
+            font-size: 24px;
+            margin-right: 15px;
+            min-width: 30px;
+        }
+        .check-ok { background: #d4edda; }
+        .check-error { background: #f8d7da; }
+        .check-warn { background: #fff3cd; }
+        button {
+            background: #007bff;
+            color: white;
+            border: none;
+            padding: 10px 20px;
+            border-radius: 4px;
+            cursor: pointer;
+            font-size: 14px;
+            margin: 10px 0;
+        }
+        button:hover {
+            background: #0056b3;
+        }
+        .loading {
+            display: inline-block;
+            width: 16px;
+            height: 16px;
+            border: 2px solid #f3f3f3;
+            border-top: 2px solid #007bff;
+            border-radius: 50%;
+            animation: spin 1s linear infinite;
+        }
+        @keyframes spin {
+            0% { transform: rotate(0deg); }
+            100% { transform: rotate(360deg); }
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <h1>🏥 System Health Check</h1>
+        <button onclick="runAllChecks()">🔄 Run Health Checks</button>
+
+        <div id="results"></div>
+    </div>
+
+    <script>
+        async function runAllChecks() {
+            const results = document.getElementById('results');
+            results.innerHTML = '<div class="check"><div class="loading"></div> Running checks...</div>';
+
+            const checks = [];
+
+            // Check 1: Auth Token
+            const tokenCheck = checkAuthToken();
+            checks.push(tokenCheck);
+
+            // Check 2: Service Worker
+            const swCheck = await checkServiceWorker();
+            checks.push(swCheck);
+
+            // Check 3: Backend API
+            const apiCheck = await checkBackendAPI();
+            checks.push(apiCheck);
+
+            // Display results
+            results.innerHTML = checks.join('');
+
+            // Final verdict
+            const allOk = checks.every(c => c.includes('check-ok'));
+            if (allOk) {
+                results.innerHTML += `
+                    <div class="check check-ok">
+                        <div class="check-icon">🎉</div>
+                        <div>
+                            <strong>All Systems Ready!</strong><br>
+                            Accept button should work now.
+                        </div>
+                    </div>
+                `;
+            } else {
+                results.innerHTML += `
+                    <div class="check check-error">
+                        <div class="check-icon">⚠️</div>
+                        <div>
+                            <strong>Some Issues Found</strong><br>
+                            See docs/ACCEPT_BUTTON_FIX.md for solutions.
+                        </div>
+                    </div>
+                `;
+            }
+        }
+
+        function checkAuthToken() {
+            const token = localStorage.getItem('authToken');
+            if (token) {
+                return `
+                    <div class="check check-ok">
+                        <div class="check-icon">✅</div>
+                        <div>
+                            <strong>Auth Token</strong><br>
+                            Found in localStorage
+                        </div>
+                    </div>
+                `;
+            } else {
+                return `
+                    <div class="check check-error">
+                        <div class="check-icon">❌</div>
+                        <div>
+                            <strong>Auth Token</strong><br>
+                            Not found - Please log in
+                        </div>
+                    </div>
+                `;
+            }
+        }
+
+        async function checkServiceWorker() {
+            if ('serviceWorker' in navigator) {
+                const registration = await navigator.serviceWorker.getRegistration();
+
+                if (registration && registration.active) {
+                    if (registration.waiting) {
+                        return `
+                            <div class="check check-warn">
+                                <div class="check-icon">⚠️</div>
+                                <div>
+                                    <strong>Service Worker</strong><br>
+                                    Update available - Clear cache and reload
+                                </div>
+                            </div>
+                        `;
+                    }
+                    return `
+                        <div class="check check-ok">
+                            <div class="check-icon">✅</div>
+                            <div>
+                                <strong>Service Worker</strong><br>
+                                Active and up to date
+                            </div>
+                        </div>
+                    `;
+                } else {
+                    return `
+                        <div class="check check-error">
+                            <div class="check-icon">❌</div>
+                            <div>
+                                <strong>Service Worker</strong><br>
+                                Not registered - Reload page
+                            </div>
+                        </div>
+                    `;
+                }
+            } else {
+                return `
+                    <div class="check check-error">
+                        <div class="check-icon">❌</div>
+                        <div>
+                            <strong>Service Worker</strong><br>
+                            Not supported in this browser
+                        </div>
+                    </div>
+                `;
+            }
+        }
+
+        async function checkBackendAPI() {
+            // Use the API URL from config (sourced from .env VITE_API_URL)
+            const API_URL = window.APP_CONFIG?.API_URL || 'https://localhost:7288/api';
+
+            try {
+                // Try the assignments endpoint (no auth required for OPTIONS)
+                const response = await fetch(`${API_URL}/assignments`, {
+                    method: 'OPTIONS',
+                    signal: AbortSignal.timeout(3000)
+                }).catch(() => null);
+
+                if (response) {
+                    return `
+                        <div class="check check-ok">
+                            <div class="check-icon">✅</div>
+                            <div>
+                                <strong>Backend API</strong><br>
+                                Running on ${API_URL}<br>
+                                <small>Source: .env VITE_API_URL</small>
+                            </div>
+                        </div>
+                    `;
+                }
+
+                // Try alternative health check
+                const altResponse = await fetch(`${API_URL}/auth/login`, {
+                    method: 'OPTIONS',
+                    signal: AbortSignal.timeout(3000)
+                }).catch(() => null);
+
+                if (altResponse) {
+                    return `
+                        <div class="check check-ok">
+                            <div class="check-icon">✅</div>
+                            <div>
+                                <strong>Backend API</strong><br>
+                                Running on ${API_URL}<br>
+                                <small>Source: .env VITE_API_URL</small>
+                            </div>
+                        </div>
+                    `;
+                }
+
+                return `
+                    <div class="check check-error">
+                        <div class="check-icon">❌</div>
+                        <div>
+                            <strong>Backend API</strong><br>
+                            Not responding at ${API_URL}<br>
+                            <small>Expected: https://localhost:7288</small>
+                        </div>
+                    </div>
+                `;
+            } catch (error) {
+                return `
+                    <div class="check check-error">
+                        <div class="check-icon">❌</div>
+                        <div>
+                            <strong>Backend API</strong><br>
+                            Connection failed: ${error.message}
+                        </div>
+                    </div>
+                `;
+            }
+            }
+        }
+
+        // Auto-run on page load
+        window.addEventListener('load', () => {
+            setTimeout(runAllChecks, 500);
+        });
+    </script>
+</body>
+</html>

@@ -9,6 +9,7 @@ namespace ChurchRoster.Application.DTOs.Members
         int? MonthlyLimit,
         bool IsActive,
         DateTime CreatedAt,
-        List<string> Skills
+        List<string> Skills,
+        string? DeviceToken
     );
 }

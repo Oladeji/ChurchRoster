@@ -7,12 +7,15 @@ namespace ChurchRoster.Api
         public static void RegisterEndpoints(this IEndpointRouteBuilder app)
         {
 
-          
+
             app.MapAuthEndpoints();
             app.MapMemberEndpoints();
             app.MapSkillEndpoints();
             app.MapTaskEndpoints();
             app.MapAssignmentEndpoints();
+            app.MapInvitationEndpoints();
+            app.MapReportEndpoints();
+            app.MapDiagnosticEndpoints();
 
         }
     }

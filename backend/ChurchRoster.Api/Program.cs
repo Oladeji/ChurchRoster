@@ -92,6 +92,11 @@ app.UseForwardedHeaders(new ForwardedHeadersOptions
     });
 }
 app.UseCors("CorsConstants.Cors_Policy");
+
+// Add Authentication & Authorization middleware
+app.UseAuthentication();
+app.UseAuthorization();
+
 // Add request logging middleware
 app.Use(async (context, next) =>
 {

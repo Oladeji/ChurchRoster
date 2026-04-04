@@ -5,11 +5,13 @@
   </ItemGroup>
 
   <ItemGroup>
+    <PackageReference Include="FirebaseAdmin" />
     <PackageReference Include="Microsoft.Extensions.Configuration" />
     <PackageReference Include="Microsoft.Extensions.Configuration.Json" />
     <PackageReference Include="Npgsql.EntityFrameworkCore.PostgreSQL" />
     <PackageReference Include="Microsoft.EntityFrameworkCore.Design" />
     <PackageReference Include="Microsoft.EntityFrameworkCore.Tools" />
+    <PackageReference Include="QuestPDF" />
   </ItemGroup>
 
   <PropertyGroup>

@@ -1,0 +1,328 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Accept Button Diagnostic</title>
+    <style>
+        body {
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+            max-width: 900px;
+            margin: 20px auto;
+            padding: 20px;
+            background: #f5f5f5;
+        }
+        .section {
+            background: white;
+            padding: 20px;
+            margin: 15px 0;
+            border-radius: 8px;
+            box-shadow: 0 2px 5px rgba(0,0,0,0.1);
+        }
+        h1 { color: #333; }
+        h2 { color: #666; margin-top: 0; }
+        .status { 
+            padding: 10px; 
+            border-radius: 4px; 
+            margin: 10px 0;
+            font-weight: bold;
+        }
+        .ok { background: #d4edda; color: #155724; }
+        .error { background: #f8d7da; color: #721c24; }
+        .warn { background: #fff3cd; color: #856404; }
+        button {
+            background: #007bff;
+            color: white;
+            border: none;
+            padding: 10px 20px;
+            border-radius: 4px;
+            cursor: pointer;
+            margin: 5px;
+        }
+        button:hover { background: #0056b3; }
+        code {
+            background: #f4f4f4;
+            padding: 2px 6px;
+            border-radius: 3px;
+            font-family: 'Courier New', monospace;
+        }
+        .log {
+            background: #000;
+            color: #0f0;
+            padding: 10px;
+            border-radius: 4px;
+            font-family: 'Courier New', monospace;
+            font-size: 12px;
+            max-height: 300px;
+            overflow-y: auto;
+            white-space: pre-wrap;
+        }
+    </style>
+</head>
+<body>
+    <h1>🔍 Accept Button Diagnostic Tool</h1>
+
+    <div class="section">
+        <h2>Step 1: Check Prerequisites</h2>
+        <button onclick="runDiagnostics()">🔎 Run Full Diagnostic</button>
+        <div id="diagnostics"></div>
+    </div>
+
+    <div class="section">
+        <h2>Step 2: Test Notification with Accept Button</h2>
+        <input type="number" id="testAssignmentId" placeholder="Assignment ID" value="1" />
+        <button onclick="showTestNotification()">📢 Show Test Notification</button>
+        <p style="color: #666; font-size: 14px;">
+            This will show a notification with an Accept button. Click it and watch the logs below.
+        </p>
+    </div>
+
+    <div class="section">
+        <h2>Step 3: Live Console Logs</h2>
+        <button onclick="clearLogs()">🗑️ Clear Logs</button>
+        <div id="logs" class="log"></div>
+    </div>
+
+    <div class="section">
+        <h2>Step 4: Quick Fixes</h2>
+        <button onclick="clearServiceWorker()">🔄 Clear Service Worker</button>
+        <button onclick="checkBackend()">🌐 Check Backend</button>
+        <button onclick="testAcceptAPI()">🧪 Test Accept API Direct</button>
+    </div>
+
+    <script>
+        const logDiv = document.getElementById('logs');
+
+        function addLog(message, type = 'info') {
+            const timestamp = new Date().toLocaleTimeString();
+            const prefix = type === 'error' ? '❌' : type === 'success' ? '✅' : 'ℹ️';
+            logDiv.textContent += `[${timestamp}] ${prefix} ${message}\n`;
+            logDiv.scrollTop = logDiv.scrollHeight;
+            console.log(message);
+        }
+
+        function clearLogs() {
+            logDiv.textContent = '';
+        }
+
+        async function runDiagnostics() {
+            const div = document.getElementById('diagnostics');
+            div.innerHTML = '<p>Running diagnostics...</p>';
+
+            let html = '';
+
+            // Check 1: Auth Token
+            const token = localStorage.getItem('authToken');
+            if (token) {
+                html += '<div class="status ok">✅ Auth Token: Found</div>';
+                addLog('Auth token found in localStorage', 'success');
+            } else {
+                html += '<div class="status error">❌ Auth Token: NOT FOUND - Please log in first!</div>';
+                addLog('No auth token found - user needs to log in', 'error');
+            }
+
+            // Check 2: API URL Config
+            const apiUrl = localStorage.getItem('apiUrl');
+            if (apiUrl) {
+                html += `<div class="status ok">✅ API URL: ${apiUrl}</div>`;
+                addLog(`API URL configured: ${apiUrl}`, 'success');
+            } else {
+                html += '<div class="status warn">⚠️ API URL: Not set in localStorage yet (will use default)</div>';
+                addLog('API URL not in localStorage - will use default', 'warn');
+            }
+
+            // Check 3: Service Worker
+            if ('serviceWorker' in navigator) {
+                const reg = await navigator.serviceWorker.getRegistration();
+                if (reg && reg.active) {
+                    html += '<div class="status ok">✅ Service Worker: Active</div>';
+                    addLog('Service Worker is active', 'success');
+
+                    if (reg.waiting) {
+                        html += '<div class="status warn">⚠️ Update Available: New Service Worker waiting</div>';
+                        addLog('Service Worker update available - should clear cache', 'warn');
+                    }
+                } else {
+                    html += '<div class="status error">❌ Service Worker: Not Active</div>';
+                    addLog('Service Worker not active', 'error');
+                }
+            } else {
+                html += '<div class="status error">❌ Service Worker: Not Supported</div>';
+                addLog('Service Worker not supported in this browser', 'error');
+            }
+
+            // Check 4: Notification Permission
+            if ('Notification' in window) {
+                if (Notification.permission === 'granted') {
+                    html += '<div class="status ok">✅ Notifications: Granted</div>';
+                    addLog('Notification permission granted', 'success');
+                } else if (Notification.permission === 'denied') {
+                    html += '<div class="status error">❌ Notifications: DENIED</div>';
+                    addLog('Notification permission denied', 'error');
+                } else {
+                    html += '<div class="status warn">⚠️ Notifications: Not Asked Yet</div>';
+                    addLog('Notification permission not requested yet', 'warn');
+                }
+            }
+
+            // Check 5: Backend
+            const backendUrl = apiUrl || 'https://localhost:7288/api';
+            try {
+                const response = await fetch(`${backendUrl}/assignments`, { 
+                    method: 'OPTIONS',
+                    signal: AbortSignal.timeout(3000) 
+                }).catch(() => null);
+
+                if (response) {
+                    html += `<div class="status ok">✅ Backend: Responding at ${backendUrl}</div>`;
+                    addLog(`Backend is responding at ${backendUrl}`, 'success');
+                } else {
+                    html += `<div class="status error">❌ Backend: NOT responding at ${backendUrl}</div>`;
+                    addLog(`Backend not responding at ${backendUrl}`, 'error');
+                }
+            } catch (error) {
+                html += `<div class="status error">❌ Backend: Error - ${error.message}</div>`;
+                addLog(`Backend check failed: ${error.message}`, 'error');
+            }
+
+            div.innerHTML = html;
+        }
+
+        async function showTestNotification() {
+            const assignmentId = document.getElementById('testAssignmentId').value;
+
+            if (Notification.permission !== 'granted') {
+                const result = await Notification.requestPermission();
+                if (result !== 'granted') {
+                    addLog('Notification permission denied', 'error');
+                    return;
+                }
+            }
+
+            addLog(`Creating test notification for assignment ${assignmentId}`, 'info');
+
+            const reg = await navigator.serviceWorker.ready;
+
+            await reg.showNotification('Test Assignment Notification', {
+                body: 'Click the Accept button to test functionality',
+                icon: '/icons/icon-192x192.png',
+                actions: [
+                    { action: 'accept', title: '✓ Accept' },
+                    { action: 'view', title: '👁 View Details' }
+                ],
+                data: {
+                    type: 'new_assignment',
+                    assignmentId: assignmentId,
+                    url: '/my-assignments'
+                },
+                tag: 'test-accept-' + Date.now(),
+                requireInteraction: true
+            });
+
+            addLog('Test notification shown! Click the Accept button and watch logs.', 'success');
+        }
+
+        async function clearServiceWorker() {
+            addLog('Clearing Service Worker...', 'info');
+            const reg = await navigator.serviceWorker.getRegistration();
+            if (reg) {
+                await reg.unregister();
+                addLog('Service Worker unregistered. Reloading page...', 'success');
+                setTimeout(() => location.reload(), 1000);
+            } else {
+                addLog('No Service Worker to unregister', 'warn');
+            }
+        }
+
+        async function checkBackend() {
+            const apiUrl = localStorage.getItem('apiUrl') || 'https://localhost:7288/api';
+            addLog(`Checking backend at ${apiUrl}...`, 'info');
+
+            try {
+                const response = await fetch(`${apiUrl}/assignments`, {
+                    method: 'OPTIONS',
+                    signal: AbortSignal.timeout(5000)
+                });
+                addLog(`Backend responded with status: ${response.status}`, 'success');
+            } catch (error) {
+                addLog(`Backend check failed: ${error.message}`, 'error');
+            }
+        }
+
+        async function testAcceptAPI() {
+            const assignmentId = document.getElementById('testAssignmentId').value;
+            const token = localStorage.getItem('authToken');
+            const apiUrl = localStorage.getItem('apiUrl') || 'https://localhost:7288/api';
+
+            if (!token) {
+                addLog('Cannot test API - no auth token. Please log in first.', 'error');
+                return;
+            }
+
+            addLog(`Testing POST ${apiUrl}/assignments/${assignmentId}/accept`, 'info');
+
+            try {
+                const response = await fetch(`${apiUrl}/assignments/${assignmentId}/accept`, {
+                    method: 'POST',
+                    headers: {
+                        'Authorization': `Bearer ${token}`,
+                        'Content-Type': 'application/json'
+                    }
+                });
+
+                addLog(`Response: ${response.status} ${response.statusText}`, response.ok ? 'success' : 'error');
+
+                if (response.ok) {
+                    const data = await response.json();
+                    addLog(`SUCCESS! Assignment accepted. Response: ${JSON.stringify(data)}`, 'success');
+                } else {
+                    const errorText = await response.text();
+                    addLog(`FAILED: ${errorText}`, 'error');
+                }
+            } catch (error) {
+                addLog(`API call failed: ${error.message}`, 'error');
+            }
+        }
+
+        // Listen for Service Worker messages
+        navigator.serviceWorker?.addEventListener('message', (event) => {
+            addLog(`Message from SW: ${JSON.stringify(event.data)}`, 'info');
+
+            if (event.data.type === 'GET_AUTH_TOKEN') {
+                const token = localStorage.getItem('authToken');
+                addLog(`SW requested auth token - responding with: ${token ? 'Token found' : 'No token'}`, token ? 'success' : 'error');
+                event.ports[0].postMessage({ token });
+            }
+        });
+
+        // Intercept console logs from Service Worker
+        const originalLog = console.log;
+        console.log = function(...args) {
+            originalLog.apply(console, args);
+            const message = args.join(' ');
+            if (message.includes('[SW]')) {
+                const timestamp = new Date().toLocaleTimeString();
+                logDiv.textContent += `[${timestamp}] ${message}\n`;
+                logDiv.scrollTop = logDiv.scrollHeight;
+            }
+        };
+
+        const originalError = console.error;
+        console.error = function(...args) {
+            originalError.apply(console, args);
+            const message = args.join(' ');
+            if (message.includes('[SW]')) {
+                const timestamp = new Date().toLocaleTimeString();
+                logDiv.textContent += `[${timestamp}] ❌ ${message}\n`;
+                logDiv.scrollTop = logDiv.scrollHeight;
+            }
+        };
+
+        // Auto-run diagnostics on load
+        window.addEventListener('load', () => {
+            setTimeout(runDiagnostics, 500);
+            addLog('Diagnostic tool loaded. Ready to test Accept button functionality.', 'info');
+        });
+    </script>
+</body>
+</html>

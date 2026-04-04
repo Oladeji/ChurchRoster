@@ -41,14 +41,17 @@ export interface Task {
 export interface Assignment {
   assignmentId: number;
   taskId: number;
+  taskName: string;
   userId: number;
+  userName: string;
   eventDate: string;
   status: AssignmentStatus;
   rejectionReason?: string;
   isOverride: boolean;
   assignedBy: number;
+  assignedByName: string;
   createdAt: string;
-  updatedAt: string;
+  // Legacy optional nested objects (deprecated, use flat properties above)
   task?: Task;
   user?: User;
 }

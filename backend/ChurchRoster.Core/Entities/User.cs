@@ -6,7 +6,7 @@ public class User
     public string Name { get; set; } = string.Empty;
     public string Email { get; set; } = string.Empty;
     public string? Phone { get; set; }
-    public string PasswordHash { get; set; } = string.Empty;
+    public string? PasswordHash { get; set; } // Nullable for pending invitations
     public string Role { get; set; } = "Member"; // Admin or Member
     public int? MonthlyLimit { get; set; }
     public string? DeviceToken { get; set; }

@@ -1,0 +1,338 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Test Accept Assignment</title>
+    <script src="/config.js"></script>
+    <style>
+        body {
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+            max-width: 800px;
+            margin: 50px auto;
+            padding: 20px;
+            background: #f5f5f5;
+        }
+        .container {
+            background: white;
+            padding: 30px;
+            border-radius: 8px;
+            box-shadow: 0 2px 10px rgba(0,0,0,0.1);
+        }
+        h1 {
+            color: #333;
+            margin-bottom: 30px;
+        }
+        .test-section {
+            margin: 20px 0;
+            padding: 15px;
+            border: 1px solid #ddd;
+            border-radius: 4px;
+            background: #f9f9f9;
+        }
+        button {
+            background: #007bff;
+            color: white;
+            border: none;
+            padding: 10px 20px;
+            border-radius: 4px;
+            cursor: pointer;
+            font-size: 14px;
+            margin: 5px;
+        }
+        button:hover {
+            background: #0056b3;
+        }
+        button.success {
+            background: #28a745;
+        }
+        button.danger {
+            background: #dc3545;
+        }
+        input {
+            padding: 8px;
+            border: 1px solid #ddd;
+            border-radius: 4px;
+            margin-right: 10px;
+            width: 100px;
+        }
+        .log {
+            background: #000;
+            color: #0f0;
+            padding: 15px;
+            border-radius: 4px;
+            font-family: 'Courier New', monospace;
+            font-size: 12px;
+            max-height: 400px;
+            overflow-y: auto;
+            margin-top: 15px;
+        }
+        .log-entry {
+            margin: 2px 0;
+            white-space: pre-wrap;
+        }
+        .log-error {
+            color: #ff6b6b;
+        }
+        .log-success {
+            color: #51cf66;
+        }
+        .log-info {
+            color: #74c0fc;
+        }
+        .status {
+            display: inline-block;
+            padding: 5px 10px;
+            border-radius: 3px;
+            font-weight: bold;
+            margin-left: 10px;
+        }
+        .status.ok {
+            background: #d4edda;
+            color: #155724;
+        }
+        .status.error {
+            background: #f8d7da;
+            color: #721c24;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <h1>🧪 Test Accept Assignment</h1>
+
+        <div class="test-section">
+            <h3>1. Check Auth Token</h3>
+            <button onclick="checkAuthToken()">Check Token</button>
+            <span id="tokenStatus"></span>
+        </div>
+
+        <div class="test-section">
+            <h3>2. Check Service Worker</h3>
+            <button onclick="checkServiceWorker()">Check SW</button>
+            <button onclick="unregisterSW()" class="danger">Unregister SW</button>
+            <span id="swStatus"></span>
+        </div>
+
+        <div class="test-section">
+            <h3>3. Test Accept API Directly</h3>
+            <input type="number" id="assignmentId" placeholder="Assignment ID" value="1" />
+            <button onclick="testAcceptDirect()" class="success">Test Accept API</button>
+        </div>
+
+        <div class="test-section">
+            <h3>4. Test Notification with Accept Button</h3>
+            <input type="number" id="notifAssignmentId" placeholder="Assignment ID" value="1" />
+            <button onclick="testNotificationButton()">Show Test Notification</button>
+        </div>
+
+        <div class="test-section">
+            <h3>5. Listen for SW Messages</h3>
+            <button onclick="startListening()">Start Listening</button>
+            <button onclick="clearLogs()" class="danger">Clear Logs</button>
+        </div>
+
+        <div class="log" id="log"></div>
+    </div>
+
+    <script>
+        const log = document.getElementById('log');
+
+        function addLog(message, type = 'info') {
+            const entry = document.createElement('div');
+            entry.className = `log-entry log-${type}`;
+            const timestamp = new Date().toLocaleTimeString();
+            entry.textContent = `[${timestamp}] ${message}`;
+            log.appendChild(entry);
+            log.scrollTop = log.scrollHeight;
+            console.log(message);
+        }
+
+        function clearLogs() {
+            log.innerHTML = '';
+        }
+
+        async function checkAuthToken() {
+            const token = localStorage.getItem('authToken');
+            const statusSpan = document.getElementById('tokenStatus');
+
+            if (token) {
+                addLog('✅ Auth token found in localStorage', 'success');
+                addLog(`Token preview: ${token.substring(0, 50)}...`, 'info');
+                statusSpan.innerHTML = '<span class="status ok">Token Found</span>';
+
+                // Decode JWT to see claims
+                try {
+                    const payload = JSON.parse(atob(token.split('.')[1]));
+                    addLog(`JWT Claims: ${JSON.stringify(payload, null, 2)}`, 'info');
+                } catch (e) {
+                    addLog('⚠️ Could not decode JWT', 'error');
+                }
+            } else {
+                addLog('❌ No auth token found in localStorage', 'error');
+                addLog('💡 Make sure you are logged in!', 'info');
+                statusSpan.innerHTML = '<span class="status error">No Token</span>';
+            }
+        }
+
+        async function checkServiceWorker() {
+            const statusSpan = document.getElementById('swStatus');
+
+            if ('serviceWorker' in navigator) {
+                const registration = await navigator.serviceWorker.getRegistration();
+
+                if (registration) {
+                    addLog('✅ Service Worker registered', 'success');
+                    addLog(`Active: ${registration.active ? 'Yes' : 'No'}`, 'info');
+                    addLog(`Waiting: ${registration.waiting ? 'Yes (Update Available!)' : 'No'}`, 'info');
+                    addLog(`Installing: ${registration.installing ? 'Yes' : 'No'}`, 'info');
+                    if (registration.active) {
+                        addLog(`Script URL: ${registration.active.scriptURL}`, 'info');
+                    }
+                    statusSpan.innerHTML = '<span class="status ok">SW Active</span>';
+                } else {
+                    addLog('❌ No Service Worker registered', 'error');
+                    statusSpan.innerHTML = '<span class="status error">No SW</span>';
+                }
+            } else {
+                addLog('❌ Service Worker not supported', 'error');
+                statusSpan.innerHTML = '<span class="status error">Not Supported</span>';
+            }
+        }
+
+        async function unregisterSW() {
+            const registration = await navigator.serviceWorker.getRegistration();
+            if (registration) {
+                await registration.unregister();
+                addLog('✅ Service Worker unregistered', 'success');
+                addLog('🔄 Reloading page...', 'info');
+                setTimeout(() => location.reload(), 1000);
+            } else {
+                addLog('⚠️ No Service Worker to unregister', 'error');
+            }
+        }
+
+        async function testAcceptDirect() {
+            const assignmentId = document.getElementById('assignmentId').value;
+            const token = localStorage.getItem('authToken');
+
+            if (!token) {
+                addLog('❌ No auth token! Please log in first.', 'error');
+                return;
+            }
+
+            // Use the API URL from config (sourced from .env VITE_API_URL)
+            const API_URL = window.APP_CONFIG?.API_URL || 'https://localhost:7288/api';
+            addLog(`🚀 Testing POST ${API_URL}/assignments/${assignmentId}/accept`, 'info');
+            addLog(`📍 API URL source: .env VITE_API_URL`, 'info');
+
+            try {
+                const response = await fetch(`${API_URL}/assignments/${assignmentId}/accept`, {
+                    method: 'POST',
+                    headers: {
+                        'Authorization': `Bearer ${token}`,
+                        'Content-Type': 'application/json'
+                    }
+                });
+
+                addLog(`📥 Response Status: ${response.status} ${response.statusText}`, 'info');
+
+                if (response.ok) {
+                    const data = await response.json();
+                    addLog('✅ Accept API SUCCESS!', 'success');
+                    addLog(`Response: ${JSON.stringify(data, null, 2)}`, 'success');
+                } else {
+                    const errorText = await response.text();
+                    addLog(`❌ Accept API FAILED: ${response.status}`, 'error');
+                    addLog(`Error: ${errorText}`, 'error');
+                }
+            } catch (error) {
+                addLog(`❌ Network Error: ${error.message}`, 'error');
+            }
+        }
+
+        async function testNotificationButton() {
+            const assignmentId = document.getElementById('notifAssignmentId').value;
+
+            if (Notification.permission !== 'granted') {
+                addLog('⚠️ Notification permission not granted', 'error');
+                const result = await Notification.requestPermission();
+                if (result !== 'granted') {
+                    addLog('❌ Permission denied', 'error');
+                    return;
+                }
+            }
+
+            addLog('📢 Showing test notification with Accept button', 'info');
+
+            const registration = await navigator.serviceWorker.ready;
+
+            await registration.showNotification('Test Assignment', {
+                body: 'Click Accept to test the button functionality',
+                icon: '/icons/icon-192x192.png',
+                actions: [
+                    { action: 'accept', title: '✓ Accept' },
+                    { action: 'view', title: '👁 View Details' }
+                ],
+                data: {
+                    type: 'new_assignment',
+                    assignmentId: assignmentId,
+                    url: '/my-assignments'
+                },
+                tag: 'test-' + Date.now(),
+                requireInteraction: true
+            });
+
+            addLog('✅ Notification shown! Click the Accept button and watch the logs.', 'success');
+        }
+
+        function startListening() {
+            addLog('👂 Started listening for Service Worker messages...', 'info');
+
+            // Listen for SW messages
+            navigator.serviceWorker.addEventListener('message', (event) => {
+                addLog(`📨 Message from SW: ${JSON.stringify(event.data)}`, 'info');
+
+                if (event.data.type === 'GET_AUTH_TOKEN') {
+                    const token = localStorage.getItem('authToken');
+                    addLog(`🔑 SW requested auth token, sending: ${token ? 'Found' : 'Not Found'}`, token ? 'success' : 'error');
+                    event.ports[0].postMessage({ token });
+                }
+            });
+
+            // Override console.log to capture SW logs
+            const originalLog = console.log;
+            console.log = function(...args) {
+                originalLog.apply(console, args);
+                const message = args.join(' ');
+                if (message.includes('[SW]')) {
+                    addLog(message, 'info');
+                }
+            };
+
+            const originalError = console.error;
+            console.error = function(...args) {
+                originalError.apply(console, args);
+                const message = args.join(' ');
+                if (message.includes('[SW]')) {
+                    addLog(message, 'error');
+                }
+            };
+
+            addLog('✅ Listening setup complete', 'success');
+        }
+
+        // Auto-start listening on page load
+        window.addEventListener('load', () => {
+            addLog('🌟 Test page loaded', 'info');
+            addLog('📝 Instructions:', 'info');
+            addLog('1. Check if auth token exists', 'info');
+            addLog('2. Verify Service Worker is active', 'info');
+            addLog('3. Test accept API directly (should work)', 'info');
+            addLog('4. Test notification button (this is where the issue might be)', 'info');
+            addLog('---', 'info');
+            startListening();
+        });
+    </script>
+</body>
+</html>

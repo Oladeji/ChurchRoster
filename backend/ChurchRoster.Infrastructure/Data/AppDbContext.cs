@@ -14,6 +14,7 @@ public class AppDbContext : DbContext
     public DbSet<UserSkill> UserSkills { get; set; }
     public DbSet<MinistryTask> Tasks { get; set; }
     public DbSet<Assignment> Assignments { get; set; }
+    public DbSet<Invitation> Invitations { get; set; }
 
     protected override void OnModelCreating(ModelBuilder modelBuilder)
     {
@@ -28,7 +29,7 @@ public class AppDbContext : DbContext
             entity.Property(e => e.Name).HasColumnName("name").HasMaxLength(255).IsRequired();
             entity.Property(e => e.Email).HasColumnName("email").HasMaxLength(255).IsRequired();
             entity.Property(e => e.Phone).HasColumnName("phone").HasMaxLength(50);
-            entity.Property(e => e.PasswordHash).HasColumnName("password_hash").HasMaxLength(255).IsRequired();
+            entity.Property(e => e.PasswordHash).HasColumnName("password_hash").HasMaxLength(255); // Nullable for invitations
             entity.Property(e => e.Role).HasColumnName("role").HasMaxLength(50).HasDefaultValue("Member");
             entity.Property(e => e.MonthlyLimit).HasColumnName("monthly_limit");
             entity.Property(e => e.DeviceToken).HasColumnName("device_token");
@@ -138,6 +139,39 @@ public class AppDbContext : DbContext
             entity.HasIndex(e => e.TaskId).HasDatabaseName("idx_assignments_task");
             entity.HasIndex(e => e.Status).HasDatabaseName("idx_assignments_status");
             entity.HasIndex(e => e.EventDate).HasDatabaseName("idx_assignments_event_date");
+        });
+
+        // Configure Invitation entity
+        modelBuilder.Entity<Invitation>(entity =>
+        {
+            entity.ToTable("invitations");
+            entity.HasKey(e => e.InvitationId);
+            entity.Property(e => e.InvitationId).HasColumnName("invitation_id");
+            entity.Property(e => e.Email).HasColumnName("email").HasMaxLength(255).IsRequired();
+            entity.Property(e => e.Name).HasColumnName("name").HasMaxLength(255).IsRequired();
+            entity.Property(e => e.Phone).HasColumnName("phone").HasMaxLength(50);
+            entity.Property(e => e.Role).HasColumnName("role").HasMaxLength(50).HasDefaultValue("Member");
+            entity.Property(e => e.Token).HasColumnName("token").HasMaxLength(255).IsRequired();
+            entity.Property(e => e.CreatedAt).HasColumnName("created_at").HasDefaultValueSql("NOW()");
+            entity.Property(e => e.ExpiresAt).HasColumnName("expires_at");
+            entity.Property(e => e.IsUsed).HasColumnName("is_used").HasDefaultValue(false);
+            entity.Property(e => e.UsedAt).HasColumnName("used_at");
+            entity.Property(e => e.UserId).HasColumnName("user_id");
+            entity.Property(e => e.CreatedBy).HasColumnName("created_by");
+
+            entity.HasIndex(e => e.Token).IsUnique().HasDatabaseName("idx_invitations_token");
+            entity.HasIndex(e => e.Email).HasDatabaseName("idx_invitations_email");
+            entity.HasIndex(e => e.IsUsed).HasDatabaseName("idx_invitations_is_used");
+
+            entity.HasOne(e => e.CreatedByUser)
+                .WithMany()
+                .HasForeignKey(e => e.CreatedBy)
+                .OnDelete(DeleteBehavior.Restrict);
+
+            entity.HasOne(e => e.User)
+                .WithMany()
+                .HasForeignKey(e => e.UserId)
+                .OnDelete(DeleteBehavior.Restrict);
         });
 
         // Seed initial data

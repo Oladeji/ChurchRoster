@@ -96,6 +96,94 @@ namespace ChurchRoster.Infrastructure.Migrations
                     b.ToTable("assignments", (string)null);
                 });
 
+            modelBuilder.Entity("ChurchRoster.Core.Entities.Invitation", b =>
+                {
+                    b.Property<int>("InvitationId")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("integer")
+                        .HasColumnName("invitation_id");
+
+                    NpgsqlPropertyBuilderExtensions.UseIdentityByDefaultColumn(b.Property<int>("InvitationId"));
+
+                    b.Property<DateTime>("CreatedAt")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("created_at")
+                        .HasDefaultValueSql("NOW()");
+
+                    b.Property<int>("CreatedBy")
+                        .HasColumnType("integer")
+                        .HasColumnName("created_by");
+
+                    b.Property<string>("Email")
+                        .IsRequired()
+                        .HasMaxLength(255)
+                        .HasColumnType("character varying(255)")
+                        .HasColumnName("email");
+
+                    b.Property<DateTime>("ExpiresAt")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("expires_at");
+
+                    b.Property<bool>("IsUsed")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("boolean")
+                        .HasDefaultValue(false)
+                        .HasColumnName("is_used");
+
+                    b.Property<string>("Name")
+                        .IsRequired()
+                        .HasMaxLength(255)
+                        .HasColumnType("character varying(255)")
+                        .HasColumnName("name");
+
+                    b.Property<string>("Phone")
+                        .IsRequired()
+                        .HasMaxLength(50)
+                        .HasColumnType("character varying(50)")
+                        .HasColumnName("phone");
+
+                    b.Property<string>("Role")
+                        .IsRequired()
+                        .ValueGeneratedOnAdd()
+                        .HasMaxLength(50)
+                        .HasColumnType("character varying(50)")
+                        .HasDefaultValue("Member")
+                        .HasColumnName("role");
+
+                    b.Property<string>("Token")
+                        .IsRequired()
+                        .HasMaxLength(255)
+                        .HasColumnType("character varying(255)")
+                        .HasColumnName("token");
+
+                    b.Property<DateTime?>("UsedAt")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("used_at");
+
+                    b.Property<int?>("UserId")
+                        .HasColumnType("integer")
+                        .HasColumnName("user_id");
+
+                    b.HasKey("InvitationId");
+
+                    b.HasIndex("CreatedBy");
+
+                    b.HasIndex("Email")
+                        .HasDatabaseName("idx_invitations_email");
+
+                    b.HasIndex("IsUsed")
+                        .HasDatabaseName("idx_invitations_is_used");
+
+                    b.HasIndex("Token")
+                        .IsUnique()
+                        .HasDatabaseName("idx_invitations_token");
+
+                    b.HasIndex("UserId");
+
+                    b.ToTable("invitations", (string)null);
+                });
+
             modelBuilder.Entity("ChurchRoster.Core.Entities.MinistryTask", b =>
                 {
                     b.Property<int>("TaskId")
@@ -407,7 +495,6 @@ namespace ChurchRoster.Infrastructure.Migrations
                         .HasColumnName("name");
 
                     b.Property<string>("PasswordHash")
-                        .IsRequired()
                         .HasMaxLength(255)
                         .HasColumnType("character varying(255)")
                         .HasColumnName("password_hash");
@@ -450,7 +537,7 @@ namespace ChurchRoster.Infrastructure.Migrations
                             Email = "admin@church.com",
                             IsActive = true,
                             Name = "System Administrator",
-                            PasswordHash = "$2a$11$vZXm0xt/6JqZp4N0a2wVYO3h0i2EyKxGQ0rN0MqRXqB6Kd9Y3qH8G",
+                            PasswordHash = "$2a$11$X6qGvzOj1Xd/sOJs.rc0FOxxoda66NVWgoIHi.VkPTy2XRlzAlOJm",
                             Phone = "+1234567890",
                             Role = "Admin",
                             UpdatedAt = new DateTime(2026, 1, 1, 0, 0, 0, 0, DateTimeKind.Utc)
@@ -507,6 +594,24 @@ namespace ChurchRoster.Infrastructure.Migrations
                     b.Navigation("AssignedByUser");
 
                     b.Navigation("Task");
+
+                    b.Navigation("User");
+                });
+
+            modelBuilder.Entity("ChurchRoster.Core.Entities.Invitation", b =>
+                {
+                    b.HasOne("ChurchRoster.Core.Entities.User", "CreatedByUser")
+                        .WithMany()
+                        .HasForeignKey("CreatedBy")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .IsRequired();
+
+                    b.HasOne("ChurchRoster.Core.Entities.User", "User")
+                        .WithMany()
+                        .HasForeignKey("UserId")
+                        .OnDelete(DeleteBehavior.Restrict);
+
+                    b.Navigation("CreatedByUser");
 
                     b.Navigation("User");
                 });

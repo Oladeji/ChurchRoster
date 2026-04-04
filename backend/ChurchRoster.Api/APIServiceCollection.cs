@@ -2,10 +2,13 @@
 using ChurchRoster.Application.Interfaces;
 using ChurchRoster.Application.Services;
 using ChurchRoster.Infrastructure.Data;
+using Microsoft.AspNetCore.Authentication.JwtBearer;
 using Microsoft.AspNetCore.Cors.Infrastructure;
 using Microsoft.AspNetCore.Http.Features;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Options;
+using Microsoft.IdentityModel.Tokens;
+using System.Text;
 
 namespace ChurchRoster.Api
 {
@@ -13,9 +16,61 @@ namespace ChurchRoster.Api
     {
         public static IServiceCollection AddAPIServices(this IServiceCollection services, IConfiguration configuration)
         {
-            // Add DbContext
+            // Add DbContext with connection resilience
             services.AddDbContext<AppDbContext>(options =>
-                options.UseNpgsql(configuration.GetConnectionString("DefaultConnection")));
+            {
+                options.UseNpgsql(
+                    configuration.GetConnectionString("DefaultConnection"),
+                    npgsqlOptions =>
+                    {
+                        // Enable connection resilience
+                        npgsqlOptions.EnableRetryOnFailure(
+                            maxRetryCount: 3,
+                            maxRetryDelay: TimeSpan.FromSeconds(5),
+                            errorCodesToAdd: null);
+
+                        // Set command timeout
+                        npgsqlOptions.CommandTimeout(30);
+                    });
+
+                // Enable sensitive data logging in development
+                if (configuration.GetValue<string>("ASPNETCORE_ENVIRONMENT") == "Development")
+                {
+                    options.EnableSensitiveDataLogging();
+                    options.EnableDetailedErrors();
+                }
+            });
+
+            // Add JWT Authentication
+            var jwtSettings = configuration.GetSection("JwtSettings");
+            var secretKey = jwtSettings["SecretKey"];
+
+            if (string.IsNullOrEmpty(secretKey))
+            {
+                throw new InvalidOperationException("JWT SecretKey is not configured in appsettings.json");
+            }
+
+            services.AddAuthentication(options =>
+            {
+                options.DefaultAuthenticateScheme = JwtBearerDefaults.AuthenticationScheme;
+                options.DefaultChallengeScheme = JwtBearerDefaults.AuthenticationScheme;
+            })
+            .AddJwtBearer(options =>
+            {
+                options.TokenValidationParameters = new TokenValidationParameters
+                {
+                    ValidateIssuer = true,
+                    ValidateAudience = true,
+                    ValidateLifetime = true,
+                    ValidateIssuerSigningKey = true,
+                    ValidIssuer = jwtSettings["Issuer"],
+                    ValidAudience = jwtSettings["Audience"],
+                    IssuerSigningKey = new SymmetricSecurityKey(Encoding.UTF8.GetBytes(secretKey)),
+                    ClockSkew = TimeSpan.Zero
+                };
+            });
+
+            services.AddAuthorization();
 
             // Add Application Services
             services.AddScoped<IAuthService, AuthService>();
@@ -23,6 +78,10 @@ namespace ChurchRoster.Api
             services.AddScoped<ISkillService, SkillService>();
             services.AddScoped<ITaskService, TaskService>();
             services.AddScoped<IAssignmentService, AssignmentService>();
+            services.AddScoped<IEmailService, EmailService>();
+            services.AddScoped<IInvitationService, InvitationService>();
+            services.AddScoped<INotificationService, NotificationService>();
+            services.AddScoped<IReportService, ReportService>();
 
             //services.AddExceptionHandler<GlobalExceptionHandler>();
             services.AddProblemDetails(options =>

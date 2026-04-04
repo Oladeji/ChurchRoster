@@ -1,6 +1,7 @@
 # 📄 Church Ministry Rostering System  
 ## Development Guide & Roadmap  
-**Version 1.0**  
+**Version 1.1**  
+*Updated: March 2026 - Added Email Invitation System to Week 5*
 *Copy this entire document and paste into Word, Google Docs, or save as .txt/.md*
 
 ---
@@ -98,15 +99,57 @@ church-roster-system/
 | 5 | Build Member Task List view | Members see their tasks |
 | 6-7 | Testing & Bug Fixes | Core flow working |
 
-### **Week 5: Notifications & Reports**
+### **Week 5: Notifications, Reports & Email Invitations**
 | Day | Task | Deliverable |
 |-----|------|-------------|
-| 1 | Set up Firebase project & get VAPID keys | Firebase ready |
-| 2 | Implement Push Notification in Frontend | Can receive pushes |
-| 3 | Implement Push Notification in Backend | Can send pushes |
-| 4 | Set up Brevo email service | Can send emails |
-| 5 | Build Printable Report (PDF generation) | Can print roster |
-| 6-7 | Testing & Bug Fixes | Notifications working |
+| 1 | Set up Brevo email service & SMTP configuration | Can send emails |
+| 2 | Implement Email Invitation System (Backend) | Invitation endpoints ready |
+| 3 | Implement Email Invitation System (Frontend) | Accept invitation page |
+| 4 | Set up Firebase project & get VAPID keys | Firebase ready |
+| 5 | Implement Push Notifications (Frontend & Backend) | Can send/receive pushes |
+| 6 | Build Printable Report (PDF generation) | Can print roster |
+| 7 | Testing & Bug Fixes | Notifications & invitations working |
+
+**Week 5 Focus Areas:**
+
+**Email Invitation System (Days 1-3):**
+- **Backend Tasks:**
+  - Create `Invitation` entity and database table
+  - Implement `InvitationService` (create, verify, accept tokens)
+  - Implement `EmailService` using Brevo SMTP
+  - Add invitation endpoints: `/api/invitations/send`, `/api/invitations/verify/{token}`, `/api/invitations/accept`
+  - Update member creation to support invitation option
+  - Create HTML email template for invitations
+
+- **Frontend Tasks:**
+  - Create `AcceptInvitation.tsx` page for password setup
+  - Update `Members.tsx` modal with "Send invitation email" checkbox
+  - Add invitation routes to `App.tsx`
+  - Implement token verification on invitation page
+  - Build password creation form for invited members
+
+- **Database Migration:**
+  - Add `invitations` table with token, expiry, and usage tracking
+  - Modify `users.password_hash` to allow NULL (for pending invitations)
+
+- **Features Delivered:**
+  - ✅ Admin can create member and send invitation email
+  - ✅ Member receives professional invitation email
+  - ✅ Member clicks link to set up their own password
+  - ✅ Invitation tokens expire after 7 days
+  - ✅ Tokens can only be used once
+  - ✅ Option to still use manual password for urgent cases
+
+**Push Notifications (Days 4-5):**
+- Set up Firebase Cloud Messaging
+- Implement notification service in backend
+- Configure service worker in frontend
+- Test push notifications on mobile devices
+
+**Reports (Day 6):**
+- Implement PDF generation for ministry rosters
+- Create printable calendar view
+- Add export functionality
 
 ### **Week 6: Polish & Launch**
 | Day | Task | Deliverable |
@@ -490,10 +533,514 @@ Need Help? Contact: admin@yourchurch.com
 | CORS errors in frontend | Add frontend domain to allowed origins in backend |
 | PWA won't install | Ensure manifest.json is valid + served over HTTPS |
 | Email not sending | Check Brevo SMTP credentials + verify sender domain |
+| Invitation email not received | Check spam folder, verify email service configuration |
+| Invitation link expired | Generate new invitation, set longer expiry time |
 
 ---
 
-## 📞 10. GETTING HELP
+## 📧 10. EMAIL INVITATION SYSTEM (WEEK 5)
+
+### **Overview**
+
+The Email Invitation System provides a professional onboarding experience where:
+1. Admin creates a member account (without setting a password)
+2. System automatically sends an invitation email to the member
+3. Member clicks the invitation link
+4. Member sets their own password
+5. Member account is activated and they can log in
+
+**Benefits:**
+- ✅ More secure (member chooses their own password)
+- ✅ Professional user experience
+- ✅ No need for admin to manually share passwords
+- ✅ Audit trail of invitation sent/accepted
+- ✅ Tokens expire for security
+
+---
+
+### **Implementation Guide**
+
+#### **A. Database Setup**
+
+Add invitations table to track invitation tokens:
+
+```sql
+-- Week 5: Add Invitations Table
+CREATE TABLE invitations (
+    invitation_id SERIAL PRIMARY KEY,
+    user_id INTEGER REFERENCES users(user_id) ON DELETE CASCADE,
+    token VARCHAR(255) UNIQUE NOT NULL,
+    expires_at TIMESTAMP NOT NULL,
+    is_used BOOLEAN DEFAULT FALSE,
+    used_at TIMESTAMP,
+    created_at TIMESTAMP DEFAULT NOW()
+);
+
+CREATE INDEX idx_invitations_token ON invitations(token);
+CREATE INDEX idx_invitations_user ON invitations(user_id);
+
+-- Modify users table to allow NULL password for pending invitations
+ALTER TABLE users ALTER COLUMN password_hash DROP NOT NULL;
+
+-- Add invitation tracking to users
+ALTER TABLE users ADD COLUMN invitation_sent_at TIMESTAMP;
+ALTER TABLE users ADD COLUMN invitation_accepted_at TIMESTAMP;
+```
+
+#### **B. Backend Implementation (.NET 10)**
+
+**1. Create Invitation Entity**
+
+```csharp
+// ChurchRoster.Core/Entities/Invitation.cs
+public class Invitation
+{
+    public int InvitationId { get; set; }
+    public int UserId { get; set; }
+    public string Token { get; set; } = null!;
+    public DateTime ExpiresAt { get; set; }
+    public bool IsUsed { get; set; }
+    public DateTime? UsedAt { get; set; }
+    public DateTime CreatedAt { get; set; }
+
+    // Navigation properties
+    public User User { get; set; } = null!;
+}
+```
+
+**2. Create Email Service**
+
+```csharp
+// ChurchRoster.Application/Interfaces/IEmailService.cs
+public interface IEmailService
+{
+    Task<bool> SendInvitationEmailAsync(string toEmail, string memberName, string invitationLink);
+    Task<bool> SendPasswordResetEmailAsync(string toEmail, string resetLink);
+}
+
+// ChurchRoster.Infrastructure/Services/EmailService.cs
+using System.Net;
+using System.Net.Mail;
+
+public class EmailService : IEmailService
+{
+    private readonly IConfiguration _configuration;
+    private readonly ILogger<EmailService> _logger;
+
+    public EmailService(IConfiguration configuration, ILogger<EmailService> logger)
+    {
+        _configuration = configuration;
+        _logger = logger;
+    }
+
+    public async Task<bool> SendInvitationEmailAsync(string toEmail, string memberName, string invitationLink)
+    {
+        try
+        {
+            var emailSettings = _configuration.GetSection("EmailSettings");
+
+            using var client = new SmtpClient(emailSettings["SmtpServer"], 
+                int.Parse(emailSettings["SmtpPort"] ?? "587"))
+            {
+                Credentials = new NetworkCredential(
+                    emailSettings["Username"],
+                    emailSettings["Password"]
+                ),
+                EnableSsl = true
+            };
+
+            var mailMessage = new MailMessage
+            {
+                From = new MailAddress(
+                    emailSettings["SenderEmail"] ?? "noreply@church.com",
+                    emailSettings["SenderName"] ?? "Church Roster System"
+                ),
+                Subject = "Welcome to Church Ministry Roster - Set Up Your Account",
+                Body = GetInvitationEmailBody(memberName, invitationLink),
+                IsBodyHtml = true
+            };
+
+            mailMessage.To.Add(toEmail);
+
+            await client.SendMailAsync(mailMessage);
+
+            _logger.LogInformation("Invitation email sent to {Email}", toEmail);
+            return true;
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "Failed to send invitation email to {Email}", toEmail);
+            return false;
+        }
+    }
+
+    private string GetInvitationEmailBody(string memberName, string invitationLink)
+    {
+        return $@"
+<!DOCTYPE html>
+<html>
+<head>
+    <style>
+        body {{ font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto; }}
+        .header {{ background: linear-gradient(135deg, #4F46E5 0%, #7C3AED 100%); padding: 40px; text-align: center; }}
+        .header h1 {{ color: white; margin: 0; }}
+        .content {{ padding: 40px; background: #f9fafb; }}
+        .button {{ background: #4F46E5; color: white; padding: 15px 30px; text-decoration: none; border-radius: 8px; display: inline-block; }}
+        .footer {{ background: #1F2937; padding: 20px; text-align: center; color: white; }}
+    </style>
+</head>
+<body>
+    <div class='header'>
+        <h1>Church Ministry Roster</h1>
+    </div>
+    <div class='content'>
+        <h2>You're Invited!</h2>
+        <p>Hello {memberName},</p>
+        <p>You've been added to the Church Ministry Roster system. Click the button below to set up your account and create your password.</p>
+        <div style='text-align: center; margin: 30px 0;'>
+            <a href='{invitationLink}' class='button'>Set Up My Account</a>
+        </div>
+        <p style='color: #6B7280; font-size: 14px;'>
+            This invitation will expire in 7 days. If you didn't expect this email, please ignore it.
+        </p>
+        <p style='color: #6B7280; font-size: 12px; margin-top: 30px;'>
+            Or copy this link: {invitationLink}
+        </p>
+    </div>
+    <div class='footer'>
+        <p style='margin: 0; font-size: 12px;'>Church Ministry Roster System</p>
+    </div>
+</body>
+</html>";
+    }
+}
+```
+
+**3. Create Invitation Service**
+
+```csharp
+// ChurchRoster.Application/Services/InvitationService.cs
+public class InvitationService : IInvitationService
+{
+    private readonly AppDbContext _context;
+    private readonly IEmailService _emailService;
+    private readonly IConfiguration _configuration;
+
+    public async Task<string> CreateInvitationAsync(int userId)
+    {
+        var token = Guid.NewGuid().ToString("N"); // 32-character token
+
+        var invitation = new Invitation
+        {
+            UserId = userId,
+            Token = token,
+            ExpiresAt = DateTime.UtcNow.AddDays(7),
+            IsUsed = false,
+            CreatedAt = DateTime.UtcNow
+        };
+
+        _context.Invitations.Add(invitation);
+        await _context.SaveChangesAsync();
+
+        return token;
+    }
+
+    public async Task<bool> SendInvitationAsync(int userId)
+    {
+        var user = await _context.Users.FindAsync(userId);
+        if (user == null) return false;
+
+        var token = await CreateInvitationAsync(userId);
+        var frontendUrl = _configuration["FrontendUrl"];
+        var invitationLink = $"{frontendUrl}/accept-invitation?token={token}";
+
+        var emailSent = await _emailService.SendInvitationEmailAsync(
+            user.Email, 
+            user.Name, 
+            invitationLink
+        );
+
+        if (emailSent)
+        {
+            user.InvitationSentAt = DateTime.UtcNow;
+            await _context.SaveChangesAsync();
+        }
+
+        return emailSent;
+    }
+
+    public async Task<Invitation?> VerifyTokenAsync(string token)
+    {
+        var invitation = await _context.Invitations
+            .Include(i => i.User)
+            .FirstOrDefaultAsync(i => i.Token == token && !i.IsUsed);
+
+        if (invitation == null) return null;
+        if (invitation.ExpiresAt < DateTime.UtcNow) return null;
+
+        return invitation;
+    }
+
+    public async Task<bool> AcceptInvitationAsync(string token, string password)
+    {
+        var invitation = await VerifyTokenAsync(token);
+        if (invitation == null) return false;
+
+        var user = invitation.User;
+        user.PasswordHash = BCrypt.Net.BCrypt.HashPassword(password);
+        user.IsActive = true;
+        user.InvitationAcceptedAt = DateTime.UtcNow;
+
+        invitation.IsUsed = true;
+        invitation.UsedAt = DateTime.UtcNow;
+
+        await _context.SaveChangesAsync();
+        return true;
+    }
+}
+```
+
+**4. Add Invitation Endpoints**
+
+```csharp
+// ChurchRoster.Api/Endpoints/InvitationEndpoints.cs
+public static class InvitationEndpoints
+{
+    public static void MapInvitationEndpoints(this IEndpointRouteBuilder routes)
+    {
+        var group = routes.MapGroup("/api/invitations").WithTags("Invitations");
+
+        group.MapPost("/send/{userId}", SendInvitation)
+            .RequireAuthorization()
+            .WithName("SendInvitation");
+
+        group.MapGet("/verify/{token}", VerifyInvitation)
+            .WithName("VerifyInvitation");
+
+        group.MapPost("/accept", AcceptInvitation)
+            .WithName("AcceptInvitation");
+    }
+
+    private static async Task<IResult> SendInvitation(
+        int userId, 
+        IInvitationService invitationService)
+    {
+        var sent = await invitationService.SendInvitationAsync(userId);
+        return sent ? Results.Ok() : Results.BadRequest("Failed to send invitation");
+    }
+
+    private static async Task<IResult> VerifyInvitation(
+        string token, 
+        IInvitationService invitationService)
+    {
+        var invitation = await invitationService.VerifyTokenAsync(token);
+        if (invitation == null)
+            return Results.BadRequest("Invalid or expired invitation");
+
+        return Results.Ok(new 
+        { 
+            userName = invitation.User.Name,
+            email = invitation.User.Email,
+            isValid = true
+        });
+    }
+
+    private static async Task<IResult> AcceptInvitation(
+        AcceptInvitationRequest request,
+        IInvitationService invitationService)
+    {
+        var accepted = await invitationService.AcceptInvitationAsync(
+            request.Token, 
+            request.Password
+        );
+
+        return accepted 
+            ? Results.Ok(new { message = "Account activated successfully" })
+            : Results.BadRequest("Failed to accept invitation");
+    }
+}
+```
+
+#### **C. Frontend Implementation (React + TypeScript)**
+
+**1. Create Accept Invitation Page**
+
+```typescript
+// frontend/src/pages/AcceptInvitation.tsx
+import React, { useState, useEffect } from 'react';
+import { useNavigate, useSearchParams } from 'react-router-dom';
+import apiService from '../services/api.service';
+
+const AcceptInvitation: React.FC = () => {
+  const [searchParams] = useSearchParams();
+  const navigate = useNavigate();
+  const token = searchParams.get('token');
+
+  const [invitationData, setInvitationData] = useState<any>(null);
+  const [password, setPassword] = useState('');
+  const [confirmPassword, setConfirmPassword] = useState('');
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState('');
+
+  useEffect(() => {
+    verifyToken();
+  }, [token]);
+
+  const verifyToken = async () => {
+    if (!token) {
+      setError('Invalid invitation link');
+      setLoading(false);
+      return;
+    }
+
+    try {
+      const data = await apiService.get(`/invitations/verify/${token}`);
+      setInvitationData(data);
+    } catch (err) {
+      setError('This invitation link is invalid or has expired');
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const handleSubmit = async (e: React.FormEvent) => {
+    e.preventDefault();
+
+    if (password !== confirmPassword) {
+      setError('Passwords do not match');
+      return;
+    }
+
+    if (password.length < 8) {
+      setError('Password must be at least 8 characters');
+      return;
+    }
+
+    setLoading(true);
+    try {
+      await apiService.post('/invitations/accept', { token, password });
+      alert('Account activated! You can now log in.');
+      navigate('/login');
+    } catch (err: any) {
+      setError(err.response?.data?.message || 'Failed to activate account');
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  if (loading) return <div className="loading">Verifying invitation...</div>;
+  if (error && !invitationData) {
+    return (
+      <div className="login-container">
+        <div className="login-card">
+          <h1>Invalid Invitation</h1>
+          <p>{error}</p>
+          <button onClick={() => navigate('/login')}>Go to Login</button>
+        </div>
+      </div>
+    );
+  }
+
+  return (
+    <div className="login-container">
+      <div className="login-card">
+        <h1>Welcome, {invitationData?.userName}!</h1>
+        <h2>Set Up Your Account</h2>
+
+        {error && <div className="error-message">{error}</div>}
+
+        <form onSubmit={handleSubmit}>
+          <div className="form-group">
+            <label>Email (verified)</label>
+            <input type="email" value={invitationData?.email} disabled />
+          </div>
+
+          <div className="form-group">
+            <label htmlFor="password">Create Password *</label>
+            <input
+              id="password"
+              type="password"
+              value={password}
+              onChange={(e) => setPassword(e.target.value)}
+              required
+              autoComplete="new-password"
+            />
+          </div>
+
+          <div className="form-group">
+            <label htmlFor="confirmPassword">Confirm Password *</label>
+            <input
+              id="confirmPassword"
+              type="password"
+              value={confirmPassword}
+              onChange={(e) => setConfirmPassword(e.target.value)}
+              required
+              autoComplete="new-password"
+            />
+          </div>
+
+          <button type="submit" disabled={loading}>
+            {loading ? 'Activating...' : 'Activate Account'}
+          </button>
+        </form>
+      </div>
+    </div>
+  );
+};
+
+export default AcceptInvitation;
+```
+
+**2. Update Members Page**
+
+```typescript
+// Add checkbox to Members.tsx modal
+const [sendInvitation, setSendInvitation] = useState(true);
+
+<div className="form-group">
+  <label>
+    <input
+      type="checkbox"
+      checked={sendInvitation}
+      onChange={(e) => setSendInvitation(e.target.checked)}
+    />
+    {' '}Send invitation email (recommended)
+  </label>
+</div>
+
+{!sendInvitation && (
+  <div className="form-group">
+    <label htmlFor="password">Temporary Password *</label>
+    <input id="password" type="password" ... />
+  </label>
+)}
+```
+
+#### **D. Configuration**
+
+**Backend appsettings.json:**
+```json
+{
+  "EmailSettings": {
+    "SmtpServer": "smtp-relay.brevo.com",
+    "SmtpPort": 587,
+    "SenderEmail": "noreply@yourchurch.com",
+    "SenderName": "Church Roster System",
+    "Username": "your-brevo-username",
+    "Password": "your-brevo-api-key"
+  },
+  "FrontendUrl": "https://your-app.vercel.app"
+}
+```
+
+**Frontend .env:**
+```env
+VITE_API_URL=https://your-api.onrender.com/api
+```
+
+---
+
+## 📞 11. GETTING HELP
 
 | Resource | Link |
 |----------|------|
