@@ -1,4 +1,5 @@
 ﻿using Asp.Versioning;
+using ChurchRoster.Api.BackgroundServices;
 using ChurchRoster.Application.Interfaces;
 using ChurchRoster.Application.Services;
 using ChurchRoster.Infrastructure.Data;
@@ -82,6 +83,10 @@ namespace ChurchRoster.Api
             services.AddScoped<IInvitationService, InvitationService>();
             services.AddScoped<INotificationService, NotificationService>();
             services.AddScoped<IReportService, ReportService>();
+
+            // Add Background Services
+            services.AddHostedService<AssignmentReminderService>();
+            services.AddHostedService<AssignmentStatusUpdateService>();
 
             //services.AddExceptionHandler<GlobalExceptionHandler>();
             services.AddProblemDetails(options =>

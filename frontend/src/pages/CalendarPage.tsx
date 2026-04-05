@@ -2,6 +2,7 @@ import React, { useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import Calendar from '../components/Calendar';
 import AssignmentModal from '../components/AssignmentModal';
+import assignmentService from '../services/assignment.service';
 import type { Assignment } from '../types';
 
 const CalendarPage: React.FC = () => {
@@ -11,6 +12,8 @@ const CalendarPage: React.FC = () => {
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [isDetailsOpen, setIsDetailsOpen] = useState(false);
   const [refreshKey, setRefreshKey] = useState(0);
+  const [exporting, setExporting] = useState(false);
+  const [displayedMonth, setDisplayedMonth] = useState(new Date());
 
   const handleDateClick = (date: Date) => {
     setSelectedDate(date);
@@ -38,6 +41,63 @@ const CalendarPage: React.FC = () => {
     setRefreshKey(prev => prev + 1); // Force calendar refresh
   };
 
+  const getMonthRange = () => {
+    const firstDay = new Date(displayedMonth.getFullYear(), displayedMonth.getMonth(), 1);
+    const lastDay = new Date(displayedMonth.getFullYear(), displayedMonth.getMonth() + 1, 0);
+
+    return {
+      startDate: firstDay.toISOString().split('T')[0],
+      endDate: lastDay.toISOString().split('T')[0],
+      monthLabel: firstDay.toLocaleDateString('en-US', { month: 'long', year: 'numeric' })
+    };
+  };
+
+  const getDisplayedMonthLabel = () => {
+    return displayedMonth.toLocaleDateString('en-US', { month: 'long', year: 'numeric' });
+  };
+
+  const handlePrintCalendar = () => {
+    window.print();
+  };
+
+  const handleExportCalendar = async () => {
+    try {
+      setExporting(true);
+      const { startDate, endDate, monthLabel } = getMonthRange();
+      const assignments = await assignmentService.getAssignments({ startDate, endDate });
+
+      const rows = [
+        ['Task', 'Member', 'Date', 'Status', 'Assigned By'],
+        ...assignments.map(a => [
+          a.taskName || a.task?.taskName || '',
+          a.userName || a.user?.name || '',
+          formatDate(a.eventDate),
+          a.status,
+          a.assignedByName || 'Admin'
+        ])
+      ];
+
+      const csv = rows
+        .map(row => row.map(value => `"${String(value).replace(/"/g, '""')}"`).join(','))
+        .join('\n');
+
+      const blob = new Blob([csv], { type: 'text/csv;charset=utf-8;' });
+      const url = URL.createObjectURL(blob);
+      const link = document.createElement('a');
+      link.href = url;
+      link.download = `calendar_export_${monthLabel.replace(/\s+/g, '_')}.csv`;
+      document.body.appendChild(link);
+      link.click();
+      link.remove();
+      URL.revokeObjectURL(url);
+    } catch (error) {
+      console.error('Failed to export calendar:', error);
+      alert('Failed to export calendar');
+    } finally {
+      setExporting(false);
+    }
+  };
+
   const formatDate = (dateString: string) => {
     const date = new Date(dateString);
     return date.toLocaleDateString('en-US', {
@@ -62,8 +122,8 @@ const CalendarPage: React.FC = () => {
   };
 
   return (
-    <div className="page-container">
-      <div className="page-header">
+    <div className="page-container calendar-print-page">
+      <div className="page-header no-print">
         <div>
           <h1>📅 Ministry Calendar</h1>
           <p>View and manage ministry assignments</p>
@@ -74,6 +134,19 @@ const CalendarPage: React.FC = () => {
             className="btn-secondary"
           >
             ← Back to Dashboard
+          </button>
+          <button
+            onClick={handlePrintCalendar}
+            className="btn-secondary"
+          >
+            🖨️ Print Calendar
+          </button>
+          <button
+            onClick={handleExportCalendar}
+            className="btn-secondary"
+            disabled={exporting}
+          >
+            {exporting ? 'Exporting...' : '📤 Export CSV'}
           </button>
           <button
             onClick={() => {
@@ -88,11 +161,17 @@ const CalendarPage: React.FC = () => {
         </div>
       </div>
 
-      <div className="calendar-page-content">
+      <div className="calendar-page-content calendar-print-container">
+        <div className="print-only calendar-print-title">
+          <h1>Ministry Calendar - {getDisplayedMonthLabel()}</h1>
+          <p>Printable ministry assignment calendar</p>
+        </div>
         <Calendar
           key={refreshKey}
           onDateClick={handleDateClick}
           onAssignmentClick={handleAssignmentClick}
+          currentMonth={displayedMonth}
+          onMonthChange={setDisplayedMonth}
         />
       </div>
 

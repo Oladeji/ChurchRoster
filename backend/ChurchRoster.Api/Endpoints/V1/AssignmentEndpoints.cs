@@ -62,6 +62,19 @@ namespace ChurchRoster.Api.Endpoints.V1
                 .WithName("DeleteAssignment")
                 .Produces(StatusCodes.Status204NoContent)
                 .Produces(StatusCodes.Status404NotFound);
+
+            group.MapPost("/{id:int}/revoke", RevokeAssignment)
+                .WithName("RevokeAssignment")
+                .Produces(StatusCodes.Status200OK)
+                .Produces(StatusCodes.Status400BadRequest)
+                .Produces(StatusCodes.Status404NotFound)
+                .RequireAuthorization();
+
+            group.MapPost("/{id:int}/send-reminder", SendManualReminder)
+                .WithName("SendManualReminder")
+                .Produces(StatusCodes.Status200OK)
+                .Produces(StatusCodes.Status404NotFound)
+                .RequireAuthorization();
         }
 
         private static async Task<IResult> GetAllAssignments(IAssignmentService assignmentService)
@@ -314,5 +327,35 @@ namespace ChurchRoster.Api.Endpoints.V1
             var result = await assignmentService.DeleteAssignmentAsync(id);
             return result ? Results.NoContent() : Results.NotFound();
         }
+
+        private static async Task<IResult> RevokeAssignment(int id, RevokeAssignmentRequest request, IAssignmentService assignmentService)
+        {
+            var result = await assignmentService.RevokeAssignmentAsync(id, request.Reason ?? "No reason provided");
+
+            if (!result)
+            {
+                return Results.BadRequest(new { message = "Failed to revoke assignment. Assignment may not exist or is not in Pending status." });
+            }
+
+            return Results.Ok(new { message = "Assignment revoked successfully and notification sent to member" });
+        }
+
+        private static async Task<IResult> SendManualReminder(int id, IAssignmentService assignmentService)
+        {
+            var result = await assignmentService.SendManualReminderAsync(id);
+
+            if (!result)
+            {
+                return Results.NotFound(new { message = "Assignment not found" });
+            }
+
+            return Results.Ok(new { message = "Reminder sent successfully" });
+        }
     }
+}
+
+// DTO for revoke request
+namespace ChurchRoster.Application.DTOs.Assignments
+{
+    public record RevokeAssignmentRequest(string? Reason);
 }

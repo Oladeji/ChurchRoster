@@ -6,12 +6,28 @@ interface CalendarProps {
   onDateClick?: (date: Date) => void;
   onAssignmentClick?: (assignment: Assignment) => void;
   userId?: number; // If provided, only show this user's assignments
+  currentMonth?: Date;
+  onMonthChange?: (date: Date) => void;
 }
 
-const Calendar: React.FC<CalendarProps> = ({ onDateClick, onAssignmentClick, userId }) => {
-  const [currentDate, setCurrentDate] = useState(new Date());
+const Calendar: React.FC<CalendarProps> = ({ onDateClick, onAssignmentClick, userId, currentMonth, onMonthChange }) => {
+  const [currentDate, setCurrentDate] = useState(currentMonth ?? new Date());
   const [assignments, setAssignments] = useState<Assignment[]>([]);
   const [loading, setLoading] = useState(true);
+
+  useEffect(() => {
+    if (
+      currentMonth &&
+      (currentMonth.getFullYear() !== currentDate.getFullYear() ||
+        currentMonth.getMonth() !== currentDate.getMonth())
+    ) {
+      setCurrentDate(currentMonth);
+    }
+  }, [currentMonth, currentDate]);
+
+  useEffect(() => {
+    onMonthChange?.(currentDate);
+  }, [currentDate, onMonthChange]);
 
   useEffect(() => {
     loadAssignments();

@@ -3,16 +3,24 @@ using ChurchRoster.Application.Interfaces;
 using ChurchRoster.Core.Entities;
 using ChurchRoster.Infrastructure.Data;
 using Microsoft.EntityFrameworkCore;
+using Microsoft.Extensions.Logging;
 
 namespace ChurchRoster.Application.Services
 {
     public class AssignmentService : IAssignmentService
     {
         private readonly AppDbContext _context;
+        private readonly IEmailService _emailService;
+        private readonly ILogger<AssignmentService> _logger;
 
-        public AssignmentService(AppDbContext context)
+        public AssignmentService(
+            AppDbContext context, 
+            IEmailService emailService,
+            ILogger<AssignmentService> logger)
         {
             _context = context;
+            _emailService = emailService;
+            _logger = logger;
         }
 
         public async Task<IEnumerable<AssignmentDto>> GetAllAssignmentsAsync()
@@ -67,6 +75,32 @@ namespace ChurchRoster.Application.Services
 
             _context.Assignments.Add(assignment);
             await _context.SaveChangesAsync();
+
+            // Send email notification to the assigned user
+            try
+            {
+                var createdAssignment = await GetAssignmentByIdAsync(assignment.AssignmentId);
+                if (createdAssignment != null)
+                {
+                    var user = await _context.Users.FindAsync(request.UserId);
+                    var task = await _context.Tasks.FindAsync(request.TaskId);
+
+                    if (user != null && task != null)
+                    {
+                        await _emailService.SendAssignmentNotificationAsync(
+                            user.Email,
+                            user.Name,
+                            task.TaskName,
+                            eventDateUtc);
+
+                        _logger.LogInformation("Sent assignment notification email to {UserEmail}", user.Email);
+                    }
+                }
+            }
+            catch (Exception ex)
+            {
+                _logger.LogError(ex, "Failed to send assignment notification email, but assignment was created");
+            }
 
             return await GetAssignmentByIdAsync(assignment.AssignmentId);
         }
@@ -230,6 +264,127 @@ namespace ChurchRoster.Application.Services
             var isValid = errors.Count == 0 || (isOverride && errors.All(e => e.Contains("not found") == false));
 
             return new AssignmentValidationResult(isValid, errors, warnings);
+        }
+
+        public async Task<bool> RevokeAssignmentAsync(int assignmentId, string reason)
+        {
+            _logger.LogInformation("Revoking assignment {AssignmentId} with reason: {Reason}", assignmentId, reason);
+
+            var assignment = await _context.Assignments
+                .Include(a => a.User)
+                .Include(a => a.Task)
+                .FirstOrDefaultAsync(a => a.AssignmentId == assignmentId);
+
+            if (assignment == null)
+            {
+                _logger.LogWarning("Assignment {AssignmentId} not found", assignmentId);
+                return false;
+            }
+
+            // Only allow revoking pending assignments
+            if (assignment.Status != "Pending")
+            {
+                _logger.LogWarning("Cannot revoke assignment {AssignmentId} with status {Status}", assignmentId, assignment.Status);
+                return false;
+            }
+
+            try
+            {
+                // Send email notification
+                await _emailService.SendAssignmentRevokedNotificationAsync(
+                    assignment.User.Email,
+                    assignment.User.Name,
+                    assignment.Task.TaskName,
+                    assignment.EventDate,
+                    reason);
+
+                // Delete the assignment
+                _context.Assignments.Remove(assignment);
+                await _context.SaveChangesAsync();
+
+                _logger.LogInformation("Successfully revoked assignment {AssignmentId}", assignmentId);
+                return true;
+            }
+            catch (Exception ex)
+            {
+                _logger.LogError(ex, "Error revoking assignment {AssignmentId}", assignmentId);
+                return false;
+            }
+        }
+
+        public async Task<bool> SendManualReminderAsync(int assignmentId)
+        {
+            _logger.LogInformation("Sending manual reminder for assignment {AssignmentId}", assignmentId);
+
+            var assignment = await _context.Assignments
+                .Include(a => a.User)
+                .Include(a => a.Task)
+                .FirstOrDefaultAsync(a => a.AssignmentId == assignmentId);
+
+            if (assignment == null)
+            {
+                _logger.LogWarning("Assignment {AssignmentId} not found", assignmentId);
+                return false;
+            }
+
+            try
+            {
+                var daysUntil = (assignment.EventDate.Date - DateTime.UtcNow.Date).Days;
+
+                await _emailService.SendAssignmentReminderAsync(
+                    assignment.User.Email,
+                    assignment.User.Name,
+                    assignment.Task.TaskName,
+                    assignment.EventDate,
+                    daysUntil);
+
+                _logger.LogInformation("Successfully sent manual reminder for assignment {AssignmentId}", assignmentId);
+                return true;
+            }
+            catch (Exception ex)
+            {
+                _logger.LogError(ex, "Error sending manual reminder for assignment {AssignmentId}", assignmentId);
+                return false;
+            }
+        }
+
+        public async Task<int> AutoUpdatePastAssignmentStatusesAsync()
+        {
+            var todayUtc = DateTime.UtcNow.Date;
+
+            var assignmentsToExpire = await _context.Assignments
+                .Where(a => a.EventDate.Date < todayUtc && a.Status == "Pending")
+                .ToListAsync();
+
+            var assignmentsToComplete = await _context.Assignments
+                .Where(a => a.EventDate.Date < todayUtc &&
+                            (a.Status == "Accepted" || a.Status == "Confirmed"))
+                .ToListAsync();
+
+            foreach (var assignment in assignmentsToExpire)
+            {
+                assignment.Status = "Expired";
+                assignment.UpdatedAt = DateTime.UtcNow;
+            }
+
+            foreach (var assignment in assignmentsToComplete)
+            {
+                assignment.Status = "Completed";
+                assignment.UpdatedAt = DateTime.UtcNow;
+            }
+
+            var totalUpdated = assignmentsToExpire.Count + assignmentsToComplete.Count;
+
+            if (totalUpdated > 0)
+            {
+                await _context.SaveChangesAsync();
+                _logger.LogInformation(
+                    "Auto-updated {ExpiredCount} assignments to Expired and {CompletedCount} assignments to Completed",
+                    assignmentsToExpire.Count,
+                    assignmentsToComplete.Count);
+            }
+
+            return totalUpdated;
         }
 
         private AssignmentDto MapToDto(Assignment assignment)

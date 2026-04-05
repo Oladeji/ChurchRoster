@@ -68,6 +68,16 @@ class AssignmentService {
     });
   }
 
+  async sendReminder(id: number): Promise<{ message: string }> {
+    return await apiService.post<{ message: string }>(`/assignments/${id}/send-reminder`);
+  }
+
+  async revokeAssignment(id: number, reason: string): Promise<{ message: string }> {
+    return await apiService.post<{ message: string }>(`/assignments/${id}/revoke`, {
+      reason
+    });
+  }
+
   async getMyAssignments(): Promise<Assignment[]> {
     return await apiService.get<Assignment[]>('/assignments/my');
   }

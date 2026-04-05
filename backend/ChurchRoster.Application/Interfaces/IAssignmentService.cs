@@ -13,5 +13,8 @@ namespace ChurchRoster.Application.Interfaces
         Task<IEnumerable<AssignmentDto>> GetAssignmentsByDateAsync(DateTime eventDate);
         Task<IEnumerable<AssignmentDto>> GetAssignmentsByStatusAsync(string status);
         Task<AssignmentValidationResult> ValidateAssignmentAsync(int taskId, int userId, DateTime eventDate, bool isOverride);
+        Task<bool> RevokeAssignmentAsync(int assignmentId, string reason);
+        Task<bool> SendManualReminderAsync(int assignmentId);
+        Task<int> AutoUpdatePastAssignmentStatusesAsync();
     }
 }

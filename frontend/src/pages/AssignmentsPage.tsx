@@ -8,6 +8,7 @@ const AssignmentsPage: React.FC = () => {
   const navigate = useNavigate();
   const [assignments, setAssignments] = useState<Assignment[]>([]);
   const [loading, setLoading] = useState(true);
+  const [actionLoadingId, setActionLoadingId] = useState<number | null>(null);
   const [error, setError] = useState('');
   const [filterStatus, setFilterStatus] = useState<string>('all');
 
@@ -36,6 +37,39 @@ const AssignmentsPage: React.FC = () => {
     } catch (err) {
       setError('Failed to delete assignment');
       console.error(err);
+    }
+  };
+
+  const handleSendReminder = async (id: number) => {
+    try {
+      setError('');
+      setActionLoadingId(id);
+      const result = await assignmentService.sendReminder(id);
+      alert(result.message || 'Reminder sent successfully');
+    } catch (err) {
+      setError('Failed to send reminder');
+      console.error(err);
+    } finally {
+      setActionLoadingId(null);
+    }
+  };
+
+  const handleRevokeAssignment = async (id: number) => {
+    const reason = window.prompt('Enter a reason for revoking this pending assignment:', 'Assignment withdrawn by admin');
+
+    if (reason === null) return;
+
+    try {
+      setError('');
+      setActionLoadingId(id);
+      const result = await assignmentService.revokeAssignment(id, reason.trim() || 'Assignment withdrawn by admin');
+      alert(result.message || 'Assignment revoked successfully');
+      await loadAssignments();
+    } catch (err) {
+      setError('Failed to revoke assignment');
+      console.error(err);
+    } finally {
+      setActionLoadingId(null);
     }
   };
 
@@ -189,9 +223,45 @@ const AssignmentsPage: React.FC = () => {
                       </td>
                       <td style={{ padding: '16px 24px', color: '#6b7280' }}>{a.assignedByName || 'Admin'}</td>
                       <td style={{ padding: '16px 24px', textAlign: 'right' }}>
-                        <button onClick={() => handleDeleteAssignment(a.assignmentId)} style={{ color: '#dc2626', background: 'none', border: 'none', cursor: 'pointer', padding: '4px' }}>
-                          <TrashIcon style={{ width: '20px', height: '20px' }} />
-                        </button>
+                        <div style={{ display: 'inline-flex', gap: '8px', alignItems: 'center', flexWrap: 'wrap', justifyContent: 'flex-end' }}>
+                          <button
+                            onClick={() => handleSendReminder(a.assignmentId)}
+                            disabled={actionLoadingId === a.assignmentId}
+                            style={{
+                              background: '#dbeafe',
+                              color: '#1d4ed8',
+                              border: 'none',
+                              borderRadius: '6px',
+                              padding: '6px 10px',
+                              cursor: actionLoadingId === a.assignmentId ? 'not-allowed' : 'pointer',
+                              fontSize: '12px',
+                              fontWeight: '600',
+                              opacity: actionLoadingId === a.assignmentId ? 0.7 : 1
+                            }}>
+                            {actionLoadingId === a.assignmentId ? 'Working...' : 'Send Reminder'}
+                          </button>
+                          {a.status === 'Pending' && (
+                            <button
+                              onClick={() => handleRevokeAssignment(a.assignmentId)}
+                              disabled={actionLoadingId === a.assignmentId}
+                              style={{
+                                background: '#fee2e2',
+                                color: '#b91c1c',
+                                border: 'none',
+                                borderRadius: '6px',
+                                padding: '6px 10px',
+                                cursor: actionLoadingId === a.assignmentId ? 'not-allowed' : 'pointer',
+                                fontSize: '12px',
+                                fontWeight: '600',
+                                opacity: actionLoadingId === a.assignmentId ? 0.7 : 1
+                              }}>
+                              Revoke
+                            </button>
+                          )}
+                          <button onClick={() => handleDeleteAssignment(a.assignmentId)} style={{ color: '#dc2626', background: 'none', border: 'none', cursor: 'pointer', padding: '4px' }}>
+                            <TrashIcon style={{ width: '20px', height: '20px' }} />
+                          </button>
+                        </div>
                       </td>
                     </tr>
                   ))}

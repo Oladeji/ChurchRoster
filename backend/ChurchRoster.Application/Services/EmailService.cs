@@ -146,6 +146,66 @@ namespace ChurchRoster.Application.Services
             }
         }
 
+        public async Task<bool> SendAssignmentReminderAsync(string toEmail, string toName, string taskName, DateTime eventDate, int daysUntil)
+        {
+            _logger.LogInformation("=== Starting SendAssignmentReminderAsync ===");
+            _logger.LogInformation("Recipient: {ToEmail}, Task: {TaskName}, Date: {EventDate}, Days: {Days}", toEmail, taskName, eventDate, daysUntil);
+
+            try
+            {
+                var subject = $"Reminder: {taskName} - {daysUntil} days away";
+                var body = GetAssignmentReminderTemplate(toName, taskName, eventDate, daysUntil);
+
+                var result = await SendEmailAsync(toEmail, toName, subject, body);
+
+                if (result)
+                {
+                    _logger.LogInformation("✅ Assignment reminder sent successfully to {ToEmail}", toEmail);
+                }
+                else
+                {
+                    _logger.LogError("❌ Failed to send assignment reminder to {ToEmail}", toEmail);
+                }
+
+                return result;
+            }
+            catch (Exception ex)
+            {
+                _logger.LogError(ex, "❌ EXCEPTION in SendAssignmentReminderAsync: {Message}", ex.Message);
+                return false;
+            }
+        }
+
+        public async Task<bool> SendAssignmentRevokedNotificationAsync(string toEmail, string toName, string taskName, DateTime eventDate, string reason)
+        {
+            _logger.LogInformation("=== Starting SendAssignmentRevokedNotificationAsync ===");
+            _logger.LogInformation("Recipient: {ToEmail}, Task: {TaskName}, Date: {EventDate}", toEmail, taskName, eventDate);
+
+            try
+            {
+                var subject = $"Assignment Cancelled: {taskName}";
+                var body = GetAssignmentRevokedTemplate(toName, taskName, eventDate, reason);
+
+                var result = await SendEmailAsync(toEmail, toName, subject, body);
+
+                if (result)
+                {
+                    _logger.LogInformation("✅ Assignment revoked notification sent successfully to {ToEmail}", toEmail);
+                }
+                else
+                {
+                    _logger.LogError("❌ Failed to send assignment revoked notification to {ToEmail}", toEmail);
+                }
+
+                return result;
+            }
+            catch (Exception ex)
+            {
+                _logger.LogError(ex, "❌ EXCEPTION in SendAssignmentRevokedNotificationAsync: {Message}", ex.Message);
+                return false;
+            }
+        }
+
         private async Task<bool> SendEmailAsync(string toEmail, string toName, string subject, string htmlBody)
         {
             _logger.LogInformation(">>> SendEmailAsync called");
@@ -363,6 +423,116 @@ namespace ChurchRoster.Application.Services
         <p style=""font-size: 12px; color: #9CA3AF; margin-top: 20px; text-align: center;"">
             Church Ministry Roster System<br>
             This is an automated message, please do not reply to this email.
+        </p>
+    </div>
+</body>
+</html>";
+        }
+
+        private string GetAssignmentReminderTemplate(string toName, string taskName, DateTime eventDate, int daysUntil)
+        {
+            var formattedDate = eventDate.ToString("dddd, MMMM d, yyyy");
+            var urgencyColor = daysUntil <= 7 ? "#EF4444" : "#F59E0B";
+            var urgencyText = daysUntil <= 7 ? "Coming Up Soon!" : "Upcoming";
+
+            return $@"
+<!DOCTYPE html>
+<html>
+<head>
+    <meta charset=""utf-8"">
+    <meta name=""viewport"" content=""width=device-width, initial-scale=1.0"">
+    <title>Ministry Assignment Reminder</title>
+</head>
+<body style=""font-family: Arial, sans-serif; line-height: 1.6; color: #333; max-width: 600px; margin: 0 auto; padding: 20px;"">
+    <div style=""background: linear-gradient(135deg, {urgencyColor} 0%, #DC2626 100%); color: white; padding: 30px; border-radius: 10px 10px 0 0; text-align: center;"">
+        <h1 style=""margin: 0; font-size: 28px;"">⏰ Reminder: {urgencyText}</h1>
+    </div>
+
+    <div style=""background: #ffffff; padding: 30px; border: 1px solid #e0e0e0; border-top: none; border-radius: 0 0 10px 10px;"">
+        <p style=""font-size: 18px; color: {urgencyColor}; font-weight: bold;"">Hello {toName},</p>
+
+        <p style=""font-size: 16px;"">
+            This is a friendly reminder about your upcoming ministry assignment:
+        </p>
+
+        <div style=""background: #FEF3C7; padding: 20px; border-radius: 8px; margin: 25px 0; border-left: 4px solid {urgencyColor}; text-align: center;"">
+            <h2 style=""margin: 0 0 15px 0; color: #1F2937;"">{taskName}</h2>
+            <p style=""margin: 0; font-size: 14px; color: #6B7280;"">Scheduled for</p>
+            <p style=""margin: 5px 0 15px 0; font-size: 20px; font-weight: bold; color: #4F46E5;"">{formattedDate}</p>
+            <div style=""background: {urgencyColor}; color: white; display: inline-block; padding: 10px 20px; border-radius: 20px; font-weight: bold; font-size: 18px;"">
+                {daysUntil} {(daysUntil == 1 ? "day" : "days")} away
+            </div>
+        </div>
+
+        <div style=""text-align: center; margin: 30px 0;"">
+            <a href=""{_appUrl}/my-assignments"" style=""background: #10B981; color: white; padding: 15px 40px; text-decoration: none; border-radius: 8px; font-size: 16px; font-weight: bold; display: inline-block;"">
+                View My Assignments
+            </a>
+        </div>
+
+        <p style=""font-size: 14px; color: #6B7280; border-top: 1px solid #E5E7EB; padding-top: 20px; margin-top: 30px;"">
+            Please ensure you're prepared for this assignment. If you have any questions or concerns, contact your ministry coordinator.
+        </p>
+
+        <p style=""font-size: 12px; color: #9CA3AF; margin-top: 20px; text-align: center;"">
+            Church Ministry Roster System<br>
+            This is an automated reminder message.
+        </p>
+    </div>
+</body>
+</html>";
+        }
+
+        private string GetAssignmentRevokedTemplate(string toName, string taskName, DateTime eventDate, string reason)
+        {
+            var formattedDate = eventDate.ToString("dddd, MMMM d, yyyy");
+            var reasonText = string.IsNullOrEmpty(reason) ? "No specific reason provided." : reason;
+
+            return $@"
+<!DOCTYPE html>
+<html>
+<head>
+    <meta charset=""utf-8"">
+    <meta name=""viewport"" content=""width=device-width, initial-scale=1.0"">
+    <title>Assignment Cancelled</title>
+</head>
+<body style=""font-family: Arial, sans-serif; line-height: 1.6; color: #333; max-width: 600px; margin: 0 auto; padding: 20px;"">
+    <div style=""background: linear-gradient(135deg, #6B7280 0%, #4B5563 100%); color: white; padding: 30px; border-radius: 10px 10px 0 0; text-align: center;"">
+        <h1 style=""margin: 0; font-size: 28px;"">🔄 Assignment Cancelled</h1>
+    </div>
+
+    <div style=""background: #ffffff; padding: 30px; border: 1px solid #e0e0e0; border-top: none; border-radius: 0 0 10px 10px;"">
+        <p style=""font-size: 18px; color: #6B7280; font-weight: bold;"">Hello {toName},</p>
+
+        <p style=""font-size: 16px;"">
+            We're writing to inform you that the following ministry assignment has been cancelled:
+        </p>
+
+        <div style=""background: #F3F4F6; padding: 20px; border-radius: 8px; margin: 25px 0; border-left: 4px solid #6B7280;"">
+            <p style=""margin: 0 0 10px 0; font-size: 14px; color: #6B7280;"">Ministry Task</p>
+            <h2 style=""margin: 0 0 15px 0; color: #1F2937;"">{taskName}</h2>
+            <p style=""margin: 0; font-size: 14px; color: #6B7280;"">Original Event Date</p>
+            <p style=""margin: 5px 0 0 0; font-size: 18px; font-weight: bold; color: #4F46E5;"">{formattedDate}</p>
+        </div>
+
+        <div style=""background: #FEF3C7; padding: 15px; border-radius: 8px; margin: 25px 0; border-left: 4px solid #F59E0B;"">
+            <p style=""margin: 0 0 5px 0; font-size: 12px; color: #92400E; font-weight: bold; text-transform: uppercase;"">Reason</p>
+            <p style=""margin: 0; color: #78350F;"">{reasonText}</p>
+        </div>
+
+        <div style=""text-align: center; margin: 30px 0;"">
+            <a href=""{_appUrl}/my-assignments"" style=""background: #6B7280; color: white; padding: 15px 40px; text-decoration: none; border-radius: 8px; font-size: 16px; font-weight: bold; display: inline-block;"">
+                View My Assignments
+            </a>
+        </div>
+
+        <p style=""font-size: 14px; color: #6B7280; border-top: 1px solid #E5E7EB; padding-top: 20px; margin-top: 30px;"">
+            If you have any questions about this cancellation, please contact your ministry coordinator or church administrator.
+        </p>
+
+        <p style=""font-size: 12px; color: #9CA3AF; margin-top: 20px; text-align: center;"">
+            Church Ministry Roster System<br>
+            This is an automated notification message.
         </p>
     </div>
 </body>
