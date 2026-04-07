@@ -200,7 +200,7 @@ PublishScripts/
 # except build/, which is used as an MSBuild target.
 
 # App configuration and environment files
-backend/ChurchRoster.Api/appsettings.json
+backend/ChurchRoster.Api/appsettings.Development.json
 frontend/.env
 frontend/.env.example
 !**/[Pp]ackages/build/
