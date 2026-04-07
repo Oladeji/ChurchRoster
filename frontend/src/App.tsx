@@ -23,7 +23,6 @@ function App() {
           <Route path="/login" element={<Login />} />
           <Route path="/register" element={<Register />} />
           <Route path="/accept-invitation" element={<AcceptInvitation />} />
-
           <Route
             path="/dashboard"
             element={
@@ -32,7 +31,6 @@ function App() {
               </ProtectedRoute>
             }
           />
-
           <Route
             path="/members"
             element={
@@ -112,6 +110,5 @@ function App() {
     </AuthProvider>
   );
 }
-
 export default App;
 
