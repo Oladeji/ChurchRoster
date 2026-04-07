@@ -133,10 +133,14 @@ namespace ChurchRoster.Api
 
         private static IServiceCollection AddCorsFromOrigin(this IServiceCollection services, IConfiguration configuration)
         {
-            //  var origins = configuration.GetSection(CorsConstants.CorsOrigins_PermittedClients).Get<string[]>();
-            var origins = new string[] { 
-            "localhost:3000","http://localhost:3000","https://localhost:3000",
-            };
+            var origins = configuration.GetSection("CorsSettings:AllowedOrigins").Get<string[]>()
+                ?? new[]
+                {
+                    "http://localhost:3000",
+                    "http://localhost:5173",
+                    "https://localhost:3000"
+                };
+
             services.AddCors(options =>
             {
                 options.AddPolicy("CorsConstants.Cors_Policy", builder =>
