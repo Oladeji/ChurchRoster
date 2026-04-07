@@ -147,11 +147,38 @@ namespace ChurchRoster.Api
                 {
                     builder.AllowAnyMethod()
                         .AllowAnyHeader()
-                        .WithOrigins(origins)
+                        .SetIsOriginAllowed(origin => IsAllowedOrigin(origin, origins))
                         .AllowCredentials();
                 });
             });
             return services;
+        }
+
+        private static bool IsAllowedOrigin(string? origin, IEnumerable<string> configuredOrigins)
+        {
+
+            if (origin == "http://localhost:3000") { 
+            
+            return true;
+            }
+            if (string.IsNullOrWhiteSpace(origin))
+            {
+                return false;
+            }
+
+            if (configuredOrigins.Contains(origin, StringComparer.OrdinalIgnoreCase))
+            {
+                return true;
+            }
+
+            if (!Uri.TryCreate(origin, UriKind.Absolute, out var uri))
+            {
+                return false;
+            }
+
+            return uri.Scheme.Equals("https", StringComparison.OrdinalIgnoreCase)
+                && uri.Host.StartsWith("church-roster", StringComparison.OrdinalIgnoreCase)
+                && uri.Host.EndsWith(".vercel.app", StringComparison.OrdinalIgnoreCase);
         }
 
     }
