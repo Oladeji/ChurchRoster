@@ -9,10 +9,12 @@ namespace ChurchRoster.Application.Services
     public class TaskService : ITaskService
     {
         private readonly AppDbContext _context;
+        private readonly ITenantContext _tenantContext;
 
-        public TaskService(AppDbContext context)
+        public TaskService(AppDbContext context, ITenantContext tenantContext)
         {
             _context = context;
+            _tenantContext = tenantContext;
         }
 
         public async Task<IEnumerable<TaskDto>> GetAllTasksAsync()
@@ -36,6 +38,9 @@ namespace ChurchRoster.Application.Services
 
         public async Task<TaskDto?> CreateTaskAsync(CreateTaskRequest request)
         {
+            if (!_tenantContext.TenantId.HasValue)
+                return null;
+
             // Validate required skill exists if provided
             if (request.RequiredSkillId.HasValue)
             {
@@ -46,6 +51,7 @@ namespace ChurchRoster.Application.Services
 
             var task = new MinistryTask
             {
+                TenantId = _tenantContext.TenantId.Value,
                 TaskName = request.TaskName,
                 Frequency = request.Frequency,
                 DayRule = request.DayRule,
@@ -64,7 +70,7 @@ namespace ChurchRoster.Application.Services
 
         public async Task<TaskDto?> UpdateTaskAsync(int taskId, UpdateTaskRequest request)
         {
-            var task = await _context.Tasks.FindAsync(taskId);
+            var task = await _context.Tasks.FirstOrDefaultAsync(t => t.TaskId == taskId);
             if (task == null)
                 return null;
 
@@ -91,7 +97,7 @@ namespace ChurchRoster.Application.Services
 
         public async Task<bool> DeleteTaskAsync(int taskId)
         {
-            var task = await _context.Tasks.FindAsync(taskId);
+            var task = await _context.Tasks.FirstOrDefaultAsync(t => t.TaskId == taskId);
             if (task == null)
                 return false;
 

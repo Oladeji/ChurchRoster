@@ -1,20 +1,44 @@
-import React, { useState } from 'react';
+import React, { useEffect, useState } from 'react';
+import axios from 'axios';
 import { useNavigate, Link } from 'react-router-dom';
 import { useAuth } from '../context/AuthContext';
+import authService from '../services/auth.service';
+import type { Tenant } from '../types';
 
 const Register: React.FC = () => {
   const [formData, setFormData] = useState({
+    tenantId: '',
     name: '',
     email: '',
     phone: '',
     password: '',
     confirmPassword: ''
   });
+  const [tenants, setTenants] = useState<Tenant[]>([]);
   const [error, setError] = useState('');
   const [loading, setLoading] = useState(false);
 
   const { register } = useAuth();
   const navigate = useNavigate();
+
+  useEffect(() => {
+    const loadTenants = async () => {
+      try {
+        const data = await authService.getTenants();
+        setTenants(data);
+
+        const savedTenantId = authService.getSelectedTenantId();
+        if (savedTenantId) {
+          setFormData(prev => ({ ...prev, tenantId: savedTenantId.toString() }));
+        }
+      } catch (err: unknown) {
+        console.error(err);
+        setError('Failed to load churches');
+      }
+    };
+
+    loadTenants();
+  }, []);
 
   const handleChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     setFormData({
@@ -26,6 +50,11 @@ const Register: React.FC = () => {
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     setError('');
+
+    if (!formData.tenantId) {
+      setError('Please select a church');
+      return;
+    }
 
     // Validation
     if (formData.password !== formData.confirmPassword) {
@@ -51,10 +80,14 @@ const Register: React.FC = () => {
     setLoading(true);
 
     try {
-      await register(formData.name, formData.email, formData.phone, formData.password);
+      await register(Number(formData.tenantId), formData.name, formData.email, formData.phone, formData.password);
       navigate('/dashboard');
-    } catch (err: any) {
-      setError(err.response?.data?.message || 'Registration failed. Please try again.');
+    } catch (err: unknown) {
+      if (axios.isAxiosError(err)) {
+        setError((err.response?.data as { message?: string } | undefined)?.message || 'Registration failed. Please try again.');
+      } else {
+        setError('Registration failed. Please try again.');
+      }
     } finally {
       setLoading(false);
     }
@@ -69,6 +102,31 @@ const Register: React.FC = () => {
         {error && <div className="error-message">{error}</div>}
 
         <form onSubmit={handleSubmit}>
+          <div className="form-group">
+            <label htmlFor="tenantId">Church *</label>
+            <select
+              id="tenantId"
+              name="tenantId"
+              value={formData.tenantId}
+              onChange={(e) => {
+                setFormData({ ...formData, tenantId: e.target.value });
+                if (e.target.value) {
+                  localStorage.setItem('tenantId', e.target.value);
+                } else {
+                  localStorage.removeItem('tenantId');
+                }
+              }}
+              required
+            >
+              <option value="">Select church</option>
+              {tenants.map((tenant) => (
+                <option key={tenant.tenantId} value={tenant.tenantId}>
+                  {tenant.name}
+                </option>
+              ))}
+            </select>
+          </div>
+
           <div className="form-group">
             <label htmlFor="name">Full Name *</label>
             <input

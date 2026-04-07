@@ -72,6 +72,7 @@ namespace ChurchRoster.Api
             });
 
             services.AddAuthorization();
+            services.AddScoped<ITenantContext, TenantContext>();
 
             // Add Application Services
             services.AddScoped<IAuthService, AuthService>();

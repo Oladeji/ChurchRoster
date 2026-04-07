@@ -22,11 +22,15 @@ const MemberReportPage: React.FC = () => {
 
     try {
       setLoading(true);
-      const token = localStorage.getItem('token');
+      const token = localStorage.getItem('authToken');
+      const tenantId = localStorage.getItem('tenantId');
       const url = `${API_URL}/reports/member-schedule?userId=${user.userId}&startDate=${scheduleStartDate}&endDate=${scheduleEndDate}`;
 
       const response = await fetch(url, {
-        headers: { Authorization: 'Bearer ' + token }
+        headers: {
+          Authorization: 'Bearer ' + token,
+          ...(tenantId ? { 'X-Tenant-Id': tenantId } : {})
+        }
       });
 
       if (!response.ok) throw new Error('Failed to generate report');

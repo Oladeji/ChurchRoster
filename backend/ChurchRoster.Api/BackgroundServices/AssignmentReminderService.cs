@@ -64,43 +64,57 @@ public class AssignmentReminderService : BackgroundService
 
         try
         {
-            using var scope = _serviceProvider.CreateScope();
-            var context = scope.ServiceProvider.GetRequiredService<AppDbContext>();
-            var emailService = scope.ServiceProvider.GetRequiredService<IEmailService>();
-
-            var today = DateTime.UtcNow.Date;
-            var eighteenDaysFromNow = today.AddDays(18);
-
-            // Get all pending/accepted assignments within the next 18 days
-            var upcomingAssignments = await context.Assignments
-                .Include(a => a.User)
-                .Include(a => a.Task)
-                .Where(a => a.EventDate >= today && 
-                           a.EventDate <= eighteenDaysFromNow &&
-                           (a.Status == "Pending" || a.Status == "Accepted"))
+            using var discoveryScope = _serviceProvider.CreateScope();
+            var discoveryContext = discoveryScope.ServiceProvider.GetRequiredService<AppDbContext>();
+            var tenants = await discoveryContext.Tenants
+                .IgnoreQueryFilters()
+                .Where(t => t.IsActive)
+                .AsNoTracking()
                 .ToListAsync(stoppingToken);
 
-            _logger.LogInformation("Found {Count} upcoming assignments to send reminders for", upcomingAssignments.Count);
-
-            foreach (var assignment in upcomingAssignments)
+            foreach (var tenant in tenants)
             {
-                try
-                {
-                    var daysUntil = (assignment.EventDate.Date - today).Days;
+                using var tenantScope = _serviceProvider.CreateScope();
+                var tenantContext = tenantScope.ServiceProvider.GetRequiredService<ITenantContext>();
+                tenantContext.TenantId = tenant.TenantId;
+                tenantContext.TenantName = tenant.Name;
 
-                    await emailService.SendAssignmentReminderAsync(
-                        assignment.User.Email,
-                        assignment.User.Name,
-                        assignment.Task.TaskName,
-                        assignment.EventDate,
-                        daysUntil);
+                var context = tenantScope.ServiceProvider.GetRequiredService<AppDbContext>();
+                var emailService = tenantScope.ServiceProvider.GetRequiredService<IEmailService>();
 
-                    _logger.LogInformation("Sent reminder for assignment {AssignmentId} to {UserEmail}",
-                        assignment.AssignmentId, assignment.User.Email);
-                }
-                catch (Exception ex)
+                var today = DateTime.UtcNow.Date;
+                var eighteenDaysFromNow = today.AddDays(18);
+
+                var upcomingAssignments = await context.Assignments
+                    .Include(a => a.User)
+                    .Include(a => a.Task)
+                    .Where(a => a.EventDate >= today && 
+                               a.EventDate <= eighteenDaysFromNow &&
+                               (a.Status == "Pending" || a.Status == "Accepted"))
+                    .ToListAsync(stoppingToken);
+
+                _logger.LogInformation("Found {Count} upcoming assignments to send reminders for tenant {TenantName}", upcomingAssignments.Count, tenant.Name);
+
+                foreach (var assignment in upcomingAssignments)
                 {
-                    _logger.LogError(ex, "Failed to send reminder for assignment {AssignmentId}", assignment.AssignmentId);
+                    try
+                    {
+                        var daysUntil = (assignment.EventDate.Date - today).Days;
+
+                        await emailService.SendAssignmentReminderAsync(
+                            assignment.User.Email,
+                            assignment.User.Name,
+                            assignment.Task.TaskName,
+                            assignment.EventDate,
+                            daysUntil);
+
+                        _logger.LogInformation("Sent reminder for assignment {AssignmentId} to {UserEmail} for tenant {TenantName}",
+                            assignment.AssignmentId, assignment.User.Email, tenant.Name);
+                    }
+                    catch (Exception ex)
+                    {
+                        _logger.LogError(ex, "Failed to send reminder for assignment {AssignmentId} for tenant {TenantName}", assignment.AssignmentId, tenant.Name);
+                    }
                 }
             }
 

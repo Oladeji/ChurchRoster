@@ -10,11 +10,13 @@ namespace ChurchRoster.Application.Services
     public class MemberService : IMemberService
     {
         private readonly AppDbContext _context;
+        private readonly ITenantContext _tenantContext;
         private readonly IAuthService _authService;
 
-        public MemberService(AppDbContext context, IAuthService authService)
+        public MemberService(AppDbContext context, ITenantContext tenantContext, IAuthService authService)
         {
             _context = context;
+            _tenantContext = tenantContext;
             _authService = authService;
         }
 
@@ -41,6 +43,9 @@ namespace ChurchRoster.Application.Services
 
         public async Task<MemberDto?> CreateMemberAsync(CreateMemberRequest request)
         {
+            if (!_tenantContext.TenantId.HasValue)
+                return null;
+
             // Check if email already exists
             if (await _context.Users.AnyAsync(u => u.Email == request.Email))
                 return null;
@@ -54,6 +59,7 @@ namespace ChurchRoster.Application.Services
 
             var member = new User
             {
+                TenantId = _tenantContext.TenantId.Value,
                 Name = request.Name,
                 Email = request.Email,
                 Phone = request.Phone,
@@ -75,7 +81,7 @@ namespace ChurchRoster.Application.Services
 
         public async Task<MemberDto?> UpdateMemberAsync(int userId, UpdateMemberRequest request)
         {
-            var member = await _context.Users.FindAsync(userId);
+            var member = await _context.Users.FirstOrDefaultAsync(u => u.UserId == userId);
             if (member == null)
                 return null;
 
@@ -93,7 +99,7 @@ namespace ChurchRoster.Application.Services
 
         public async Task<bool> DeleteMemberAsync(int userId)
         {
-            var member = await _context.Users.FindAsync(userId);
+            var member = await _context.Users.FirstOrDefaultAsync(u => u.UserId == userId);
             if (member == null)
                 return false;
 
@@ -107,7 +113,7 @@ namespace ChurchRoster.Application.Services
 
         public async Task<bool> UpdatePasswordAsync(int userId, UpdatePasswordRequest request)
         {
-            var member = await _context.Users.FindAsync(userId);
+            var member = await _context.Users.FirstOrDefaultAsync(u => u.UserId == userId);
             if (member == null)
                 return false;
 
@@ -173,14 +179,22 @@ namespace ChurchRoster.Application.Services
 
         public async Task<bool> AssignSkillToMemberAsync(int userId, int skillId)
         {
-            // Check if member exists
-            var memberExists = await _context.Users.AnyAsync(u => u.UserId == userId);
-            if (!memberExists)
+            var member = await _context.Users
+                .AsNoTracking()
+                .FirstOrDefaultAsync(u => u.UserId == userId);
+
+            if (member == null)
                 return false;
 
             // Check if skill exists
-            var skillExists = await _context.Skills.AnyAsync(s => s.SkillId == skillId);
-            if (!skillExists)
+            var skill = await _context.Skills
+                .AsNoTracking()
+                .FirstOrDefaultAsync(s => s.SkillId == skillId);
+
+            if (skill == null)
+                return false;
+
+            if (member.TenantId != skill.TenantId)
                 return false;
 
             // Check if already assigned
@@ -193,6 +207,7 @@ namespace ChurchRoster.Application.Services
             // Create assignment
             var userSkill = new UserSkill
             {
+                TenantId = member.TenantId,
                 UserId = userId,
                 SkillId = skillId,
                 AssignedDate = DateTime.UtcNow
@@ -248,7 +263,7 @@ namespace ChurchRoster.Application.Services
 
         public async Task<bool> UpdateDeviceTokenAsync(int userId, string deviceToken)
         {
-            var user = await _context.Users.FindAsync(userId);
+            var user = await _context.Users.FirstOrDefaultAsync(u => u.UserId == userId);
             if (user == null)
                 return false;
 

@@ -9,6 +9,7 @@ namespace ChurchRoster.Api
 
 
             app.MapAuthEndpoints();
+            app.MapTenantEndpoints();
             app.MapMemberEndpoints();
             app.MapSkillEndpoints();
             app.MapTaskEndpoints();

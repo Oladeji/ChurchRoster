@@ -1,6 +1,7 @@
 // User Types
 export interface User {
   userId: number;
+  tenantId?: number;
   name: string;
   email: string;
   phone: string;
@@ -66,11 +67,13 @@ export type AssignmentStatus =
 
 // Auth Types
 export interface LoginRequest {
+  tenantId: number;
   email: string;
   password: string;
 }
 
 export interface RegisterRequest {
+  tenantId: number;
   name: string;
   email: string;
   phone: string;
@@ -79,11 +82,18 @@ export interface RegisterRequest {
 
 export interface AuthResponse {
   userId: number;
+  tenantId: number;
   name: string;
   email: string;
   role: 'Admin' | 'Member';
   token: string;
   expiresAt: string;
+}
+
+export interface Tenant {
+  tenantId: number;
+  name: string;
+  slug: string;
 }
 
 // API Response Types

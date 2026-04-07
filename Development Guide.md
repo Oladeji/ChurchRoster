@@ -161,6 +161,51 @@ church-roster-system/
 | 5 | Fix bugs from testing | Stable system |
 | 6-7 | Go Live & Training | System launched |
 
+### **Cross-Cutting Upgrade: Multitenancy (One Church = One Tenant)**
+
+**Approved Multitenancy Strategy:**
+- One tenant maps to one church
+- Single database with discriminator column (`TenantId`)
+- All business data is tenant-specific
+- Email uniqueness is per tenant, not global
+- No domain-based tenant resolution
+- Login uses email + church selector dropdown
+- No super admin; admin belongs to one church only
+- Existing data migrates into a seeded tenant named `Default Church`
+
+**Critical Enforcement Rule:**
+- Use **EF Core Global Query Filters** at the Infrastructure Layer so tenant filtering is automatic and developers cannot accidentally leak data by forgetting a `.Where()` clause.
+
+**Backend Multitenancy Tasks:**
+- Create `Tenant` entity/table
+- Add `TenantId` to: `users`, `skills`, `tasks`, `assignments`, `invitations`, `user_skills`
+- Add a scoped tenant context service
+- Add Tenant Resolution Middleware
+- Resolve tenant from JWT `TenantId` claim for authenticated requests
+- Resolve tenant from request header (such as `X-Tenant-Id`) for login and pre-auth flows
+- Add EF Core global query filters for all tenant-owned entities
+- Auto-stamp `TenantId` during `SaveChanges`/`SaveChangesAsync`
+- Update JWT generation to include `TenantId`
+- Add tenant endpoints for frontend church selection
+- Update unique indexes to use composite tenant-aware uniqueness
+
+**Frontend Multitenancy Tasks:**
+- Add church selector dropdown to login form
+- Add tenant loading service for login UX
+- Store selected tenant using best-practice local persistence
+- Attach `TenantId` to API requests through the API interceptor
+- Keep tenant selection explicit; do not auto-select by email domain
+
+**Migration Strategy:**
+- Create a default tenant named `Default Church`
+- Assign all existing records to `Default Church`
+- Convert global unique email constraint to tenant-scoped uniqueness
+
+**Security Outcome:**
+- Tenant isolation enforced centrally
+- Lower risk of cross-tenant data exposure
+- Auth, invitations, members, reports, assignments, tasks, and skills all remain tenant-scoped
+
 ---
 
 ## 💻 4. GET STARTED: STEP-BY-STEP
@@ -423,6 +468,129 @@ INSERT INTO tasks (task_name, frequency, day_rule, required_skill_id, is_restric
 | [ ] CORS configured to allow only your frontend domain | |
 | [ ] Environment variables not committed to GitHub | |
 | [ ] SQL injection prevented (use EF Core parameterized queries) | |
+| [ ] Tenant isolation enforced by EF Core global query filters | |
+| [ ] JWT includes `TenantId` claim | |
+| [ ] Login requires explicit church selection | |
+| [ ] Unique email constraint scoped to tenant | |
+
+---
+
+## 🏢 5A. MULTITENANCY IMPLEMENTATION GUIDE
+
+### **Architecture Decision**
+
+This system uses **single-database multitenancy with a discriminator column**.
+
+**Tenant definition:**
+- One tenant = one church
+
+**Isolation mechanism:**
+- `TenantId` column on all tenant-owned tables
+- EF Core Global Query Filters in `AppDbContext`
+- Tenant Resolution Middleware in API pipeline
+- JWT `TenantId` claim for authenticated users
+
+### **Tenant Table**
+
+Example fields:
+
+```csharp
+public class Tenant
+{
+    public int TenantId { get; set; }
+    public string Name { get; set; } = string.Empty;
+    public string Slug { get; set; } = string.Empty;
+    public bool IsActive { get; set; } = true;
+    public DateTime CreatedAt { get; set; } = DateTime.UtcNow;
+    public DateTime UpdatedAt { get; set; } = DateTime.UtcNow;
+}
+```
+
+### **Tenant-Owned Entities**
+
+Add `TenantId` to:
+- `User`
+- `Skill`
+- `MinistryTask`
+- `Assignment`
+- `Invitation`
+- `UserSkill`
+
+### **Global Query Filters (Critical)**
+
+In `AppDbContext`, configure a tenant context and apply filters so all queries are automatically tenant-scoped:
+
+```csharp
+modelBuilder.Entity<User>()
+    .HasQueryFilter(x => x.TenantId == _tenantContext.TenantId);
+```
+
+Apply the same pattern to every tenant-owned entity.
+
+### **Tenant Resolution Middleware**
+
+Resolve tenant per request using:
+1. JWT `TenantId` claim for authenticated requests
+2. `X-Tenant-Id` header for login and other pre-auth requests
+
+The middleware should populate a scoped `ITenantContext` service.
+
+### **JWT Requirements**
+
+Every authenticated token must include:
+- `TenantId`
+
+Recommended optional claims:
+- `TenantName`
+- `TenantSlug`
+
+### **Frontend Login UX**
+
+Login form must include:
+- Email
+- Password
+- Church selector dropdown
+
+Do **not** auto-select a tenant by email domain.
+
+### **API Interceptor**
+
+Frontend API interceptor should attach:
+- `Authorization: Bearer {token}` when authenticated
+- `X-Tenant-Id` for login and other tenant-aware requests
+
+### **Tenant-Aware Uniqueness**
+
+Use composite unique indexes such as:
+
+```sql
+CREATE UNIQUE INDEX idx_users_tenant_email ON users (tenant_id, email);
+```
+
+### **Migration of Existing Data**
+
+Migration steps:
+1. Create `tenants` table
+2. Insert `Default Church`
+3. Add nullable `tenant_id` to existing tables
+4. Update all current rows to use `Default Church`
+5. Make `tenant_id` non-nullable
+6. Add foreign keys and tenant-aware indexes
+
+### **Admin Model**
+
+- Admin belongs to one church only
+- No super admin exists in this design
+
+### **Testing Checklist for Multitenancy**
+
+- [ ] User from Church A cannot see data from Church B
+- [ ] Email uniqueness works per tenant
+- [ ] Login fails if wrong church is selected
+- [ ] JWT contains `TenantId`
+- [ ] Invitations remain tenant-scoped
+- [ ] Reports remain tenant-scoped
+- [ ] CRUD operations auto-apply tenant filters without explicit `.Where()` clauses
 
 ---
 

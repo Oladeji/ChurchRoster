@@ -3,6 +3,7 @@ namespace ChurchRoster.Core.Entities;
 public class MinistryTask
 {
     public int TaskId { get; set; }
+    public int TenantId { get; set; }
     public string TaskName { get; set; } = string.Empty;
     public string Frequency { get; set; } = string.Empty; // Weekly or Monthly
     public string DayRule { get; set; } = string.Empty; // Tuesday, Sunday, Last Friday, etc.
@@ -13,6 +14,7 @@ public class MinistryTask
     public DateTime UpdatedAt { get; set; } = DateTime.UtcNow;
 
     // Navigation properties
+    public Tenant Tenant { get; set; } = null!;
     public Skill? RequiredSkill { get; set; }
     public ICollection<Assignment> Assignments { get; set; } = new List<Assignment>();
 }

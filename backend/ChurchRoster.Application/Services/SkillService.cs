@@ -9,10 +9,12 @@ namespace ChurchRoster.Application.Services
     public class SkillService : ISkillService
     {
         private readonly AppDbContext _context;
+        private readonly ITenantContext _tenantContext;
 
-        public SkillService(AppDbContext context)
+        public SkillService(AppDbContext context, ITenantContext tenantContext)
         {
             _context = context;
+            _tenantContext = tenantContext;
         }
 
         public async Task<IEnumerable<SkillDto>> GetAllSkillsAsync()
@@ -26,18 +28,22 @@ namespace ChurchRoster.Application.Services
 
         public async Task<SkillDto?> GetSkillByIdAsync(int skillId)
         {
-            var skill = await _context.Skills.FindAsync(skillId);
+            var skill = await _context.Skills.FirstOrDefaultAsync(s => s.SkillId == skillId);
             return skill == null ? null : MapToDto(skill);
         }
 
         public async Task<SkillDto?> CreateSkillAsync(CreateSkillRequest request)
         {
+            if (!_tenantContext.TenantId.HasValue)
+                return null;
+
             // Check if skill name already exists
             if (await _context.Skills.AnyAsync(s => s.SkillName == request.SkillName))
                 return null;
 
             var skill = new Skill
             {
+                TenantId = _tenantContext.TenantId.Value,
                 SkillName = request.SkillName,
                 Description = request.Description,
                 IsActive = true,
@@ -53,7 +59,7 @@ namespace ChurchRoster.Application.Services
 
         public async Task<SkillDto?> UpdateSkillAsync(int skillId, UpdateSkillRequest request)
         {
-            var skill = await _context.Skills.FindAsync(skillId);
+            var skill = await _context.Skills.FirstOrDefaultAsync(s => s.SkillId == skillId);
             if (skill == null)
                 return null;
 
@@ -73,7 +79,7 @@ namespace ChurchRoster.Application.Services
 
         public async Task<bool> DeleteSkillAsync(int skillId)
         {
-            var skill = await _context.Skills.FindAsync(skillId);
+            var skill = await _context.Skills.FirstOrDefaultAsync(s => s.SkillId == skillId);
             if (skill == null)
                 return false;
 
@@ -88,13 +94,16 @@ namespace ChurchRoster.Application.Services
         public async Task<UserSkillDto?> AssignSkillToUserAsync(AssignSkillRequest request)
         {
             // Check if user exists
-            var user = await _context.Users.FindAsync(request.UserId);
+            var user = await _context.Users.FirstOrDefaultAsync(u => u.UserId == request.UserId);
             if (user == null)
                 return null;
 
             // Check if skill exists
-            var skill = await _context.Skills.FindAsync(request.SkillId);
+            var skill = await _context.Skills.FirstOrDefaultAsync(s => s.SkillId == request.SkillId);
             if (skill == null)
+                return null;
+
+            if (user.TenantId != skill.TenantId)
                 return null;
 
             // Check if already assigned
@@ -103,6 +112,7 @@ namespace ChurchRoster.Application.Services
 
             var userSkill = new UserSkill
             {
+                TenantId = user.TenantId,
                 UserId = request.UserId,
                 SkillId = request.SkillId,
                 AssignedDate = DateTime.UtcNow

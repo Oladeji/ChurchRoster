@@ -10,15 +10,18 @@ namespace ChurchRoster.Application.Services
     public class AssignmentService : IAssignmentService
     {
         private readonly AppDbContext _context;
+        private readonly ITenantContext _tenantContext;
         private readonly IEmailService _emailService;
         private readonly ILogger<AssignmentService> _logger;
 
         public AssignmentService(
             AppDbContext context, 
+            ITenantContext tenantContext,
             IEmailService emailService,
             ILogger<AssignmentService> logger)
         {
             _context = context;
+            _tenantContext = tenantContext;
             _emailService = emailService;
             _logger = logger;
         }
@@ -48,6 +51,9 @@ namespace ChurchRoster.Application.Services
 
         public async Task<AssignmentDto?> CreateAssignmentAsync(CreateAssignmentRequest request, int assignedByUserId)
         {
+            if (!_tenantContext.TenantId.HasValue)
+                return null;
+
             // Ensure EventDate is in UTC
             var eventDateUtc = request.EventDate.Kind == DateTimeKind.Utc 
                 ? request.EventDate 
@@ -63,6 +69,7 @@ namespace ChurchRoster.Application.Services
 
             var assignment = new Assignment
             {
+                TenantId = _tenantContext.TenantId.Value,
                 TaskId = request.TaskId,
                 UserId = request.UserId,
                 EventDate = eventDateUtc,
@@ -82,8 +89,8 @@ namespace ChurchRoster.Application.Services
                 var createdAssignment = await GetAssignmentByIdAsync(assignment.AssignmentId);
                 if (createdAssignment != null)
                 {
-                    var user = await _context.Users.FindAsync(request.UserId);
-                    var task = await _context.Tasks.FindAsync(request.TaskId);
+                    var user = await _context.Users.FirstOrDefaultAsync(u => u.UserId == request.UserId);
+                    var task = await _context.Tasks.FirstOrDefaultAsync(t => t.TaskId == request.TaskId);
 
                     if (user != null && task != null)
                     {
@@ -107,7 +114,7 @@ namespace ChurchRoster.Application.Services
 
         public async Task<AssignmentDto?> UpdateAssignmentStatusAsync(int assignmentId, UpdateAssignmentStatusRequest request)
         {
-            var assignment = await _context.Assignments.FindAsync(assignmentId);
+            var assignment = await _context.Assignments.FirstOrDefaultAsync(a => a.AssignmentId == assignmentId);
             if (assignment == null)
                 return null;
 
@@ -122,7 +129,7 @@ namespace ChurchRoster.Application.Services
 
         public async Task<bool> DeleteAssignmentAsync(int assignmentId)
         {
-            var assignment = await _context.Assignments.FindAsync(assignmentId);
+            var assignment = await _context.Assignments.FirstOrDefaultAsync(a => a.AssignmentId == assignmentId);
             if (assignment == null)
                 return false;
 
@@ -350,6 +357,12 @@ namespace ChurchRoster.Application.Services
 
         public async Task<int> AutoUpdatePastAssignmentStatusesAsync()
         {
+            if (!_tenantContext.TenantId.HasValue)
+            {
+                _logger.LogWarning("Skipping automatic assignment status update because no tenant context is resolved");
+                return 0;
+            }
+
             var todayUtc = DateTime.UtcNow.Date;
 
             var assignmentsToExpire = await _context.Assignments

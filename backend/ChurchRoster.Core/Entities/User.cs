@@ -3,6 +3,7 @@ namespace ChurchRoster.Core.Entities;
 public class User
 {
     public int UserId { get; set; }
+    public int TenantId { get; set; }
     public string Name { get; set; } = string.Empty;
     public string Email { get; set; } = string.Empty;
     public string? Phone { get; set; }
@@ -15,6 +16,7 @@ public class User
     public DateTime UpdatedAt { get; set; } = DateTime.UtcNow;
 
     // Navigation properties
+    public Tenant Tenant { get; set; } = null!;
     public ICollection<UserSkill> UserSkills { get; set; } = new List<UserSkill>();
     public ICollection<Assignment> Assignments { get; set; } = new List<Assignment>();
     public ICollection<Assignment> AssignmentsCreated { get; set; } = new List<Assignment>();

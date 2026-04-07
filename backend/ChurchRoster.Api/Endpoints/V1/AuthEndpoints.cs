@@ -29,10 +29,10 @@ namespace ChurchRoster.Api.Endpoints.V1
             {
                 logger.LogInformation("Login endpoint called for email: {Email}", request.Email);
 
-                if (string.IsNullOrWhiteSpace(request.Email) || string.IsNullOrWhiteSpace(request.Password))
+                if (request.TenantId <= 0 || string.IsNullOrWhiteSpace(request.Email) || string.IsNullOrWhiteSpace(request.Password))
                 {
-                    logger.LogWarning("Login failed: Email or password is empty");
-                    return Results.BadRequest(new { message = "Email and password are required" });
+                    logger.LogWarning("Login failed: Church, email or password is missing");
+                    return Results.BadRequest(new { message = "Church, email and password are required" });
                 }
 
                 var response = await authService.LoginAsync(request);
@@ -59,11 +59,12 @@ namespace ChurchRoster.Api.Endpoints.V1
 
         private static async Task<IResult> Register(RegisterRequest request, IAuthService authService)
         {
-            if (string.IsNullOrWhiteSpace(request.Name) || 
+            if (request.TenantId <= 0 ||
+                string.IsNullOrWhiteSpace(request.Name) || 
                 string.IsNullOrWhiteSpace(request.Email) || 
                 string.IsNullOrWhiteSpace(request.Password))
             {
-                return Results.BadRequest(new { message = "Name, email, and password are required" });
+                return Results.BadRequest(new { message = "Church, name, email, and password are required" });
             }
 
             if (string.IsNullOrWhiteSpace(request.Phone))

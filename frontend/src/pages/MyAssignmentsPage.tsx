@@ -122,6 +122,24 @@ const MyAssignmentsPage: React.FC = () => {
     return diffDays;
   };
 
+  const backButtonStyle: React.CSSProperties = {
+    display: 'inline-flex',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: '8px',
+    padding: '12px 18px',
+    borderRadius: '12px',
+    border: '1px solid #D1D5DB',
+    background: 'white',
+    color: '#1F2937',
+    fontSize: '14px',
+    fontWeight: 600,
+    letterSpacing: '-0.01em',
+    cursor: 'pointer',
+    boxShadow: '0 8px 20px rgba(15, 23, 42, 0.08)',
+    transition: 'all 0.2s ease'
+  };
+
   return (
     <div className="page-container">
       <div className="page-header">
@@ -132,8 +150,10 @@ const MyAssignmentsPage: React.FC = () => {
         <button
           onClick={() => navigate('/dashboard')}
           className="btn-secondary"
+          style={backButtonStyle}
         >
-          ← Back to Dashboard
+          <span style={{ fontSize: '16px', lineHeight: 1 }}>←</span>
+          <span>Back to Dashboard</span>
         </button>
       </div>
 

@@ -1,4 +1,4 @@
-import React, { createContext, useState, useContext, useEffect, type ReactNode } from 'react';
+import React, { createContext, useState, useContext, type ReactNode } from 'react';
 import type { User } from '../types';
 import authService from '../services/auth.service';
 
@@ -7,13 +7,14 @@ interface AuthContextType {
   isAuthenticated: boolean;
   isAdmin: boolean;
   loading: boolean;
-  login: (email: string, password: string) => Promise<void>;
-  register: (name: string, email: string, phone: string, password: string) => Promise<void>;
+  login: (tenantId: number, email: string, password: string) => Promise<void>;
+  register: (tenantId: number, name: string, email: string, phone: string, password: string) => Promise<void>;
   logout: () => void;
 }
 
 const AuthContext = createContext<AuthContextType | undefined>(undefined);
 
+// eslint-disable-next-line react-refresh/only-export-components
 export const useAuth = () => {
   const context = useContext(AuthContext);
   if (!context) {
@@ -27,19 +28,14 @@ interface AuthProviderProps {
 }
 
 export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
-  const [user, setUser] = useState<User | null>(null);
-  const [loading, setLoading] = useState(true);
+  const [user, setUser] = useState<User | null>(() => authService.getCurrentUser());
+  const [loading] = useState(false);
 
-  useEffect(() => {
-    const currentUser = authService.getCurrentUser();
-    setUser(currentUser);
-    setLoading(false);
-  }, []);
-
-  const login = async (email: string, password: string) => {
-    const response = await authService.login({ email, password });
+  const login = async (tenantId: number, email: string, password: string) => {
+    const response = await authService.login({ tenantId, email, password });
     const userData: User = {
       userId: response.userId,
+      tenantId: response.tenantId,
       name: response.name,
       email: response.email,
       phone: '',
@@ -49,10 +45,11 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
     setUser(userData);
   };
 
-  const register = async (name: string, email: string, phone: string, password: string) => {
-    const response = await authService.register({ name, email, phone, password });
+  const register = async (tenantId: number, name: string, email: string, phone: string, password: string) => {
+    const response = await authService.register({ tenantId, name, email, phone, password });
     const userData: User = {
       userId: response.userId,
+      tenantId: response.tenantId,
       name: response.name,
       email: response.email,
       phone,

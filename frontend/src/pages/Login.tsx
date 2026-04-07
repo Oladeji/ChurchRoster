@@ -1,8 +1,13 @@
-import React, { useState } from 'react';
+import React, { useEffect, useState } from 'react';
+import axios from 'axios';
 import { useNavigate, Link } from 'react-router-dom';
 import { useAuth } from '../context/AuthContext';
+import authService from '../services/auth.service';
+import type { Tenant } from '../types';
 
 const Login: React.FC = () => {
+  const [tenantId, setTenantId] = useState('');
+  const [tenants, setTenants] = useState<Tenant[]>([]);
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [error, setError] = useState('');
@@ -11,16 +16,45 @@ const Login: React.FC = () => {
   const { login } = useAuth();
   const navigate = useNavigate();
 
+  useEffect(() => {
+    const loadTenants = async () => {
+      try {
+        const data = await authService.getTenants();
+        setTenants(data);
+
+        const savedTenantId = authService.getSelectedTenantId();
+        if (savedTenantId) {
+          setTenantId(savedTenantId.toString());
+        }
+      } catch (err: unknown) {
+        console.error(err);
+        setError('Failed to load churches');
+      }
+    };
+
+    loadTenants();
+  }, []);
+
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     setError('');
+
+    if (!tenantId) {
+      setError('Please select a church');
+      return;
+    }
+
     setLoading(true);
 
     try {
-      await login(email, password);
+      await login(Number(tenantId), email, password);
       navigate('/dashboard');
-    } catch (err: any) {
-      setError(err.response?.data?.message || 'Login failed. Please try again.');
+    } catch (err: unknown) {
+      if (axios.isAxiosError(err)) {
+        setError((err.response?.data as { message?: string } | undefined)?.message || 'Login failed. Please try again.');
+      } else {
+        setError('Login failed. Please try again.');
+      }
     } finally {
       setLoading(false);
     }
@@ -35,6 +69,30 @@ const Login: React.FC = () => {
         {error && <div className="error-message">{error}</div>}
 
         <form onSubmit={handleSubmit}>
+          <div className="form-group">
+            <label htmlFor="tenant">Church</label>
+            <select
+              id="tenant"
+              value={tenantId}
+              onChange={(e) => {
+                setTenantId(e.target.value);
+                if (e.target.value) {
+                  localStorage.setItem('tenantId', e.target.value);
+                } else {
+                  localStorage.removeItem('tenantId');
+                }
+              }}
+              required
+            >
+              <option value="">Select church</option>
+              {tenants.map((tenant) => (
+                <option key={tenant.tenantId} value={tenant.tenantId}>
+                  {tenant.name}
+                </option>
+              ))}
+            </select>
+          </div>
+
           <div className="form-group">
             <label htmlFor="email">Email</label>
             <input

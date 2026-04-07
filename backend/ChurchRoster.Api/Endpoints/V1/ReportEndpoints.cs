@@ -1,4 +1,5 @@
 using ChurchRoster.Application.Interfaces;
+using ChurchRoster.Infrastructure.Data;
 using Microsoft.AspNetCore.Mvc;
 using System.Security.Claims;
 
@@ -32,10 +33,17 @@ public static class ReportEndpoints
     private static async Task<IResult> GetMonthlyRoster(
         [FromQuery] int year,
         [FromQuery] int month,
+        HttpContext httpContext,
+        ITenantContext tenantContext,
         IReportService reportService)
     {
         try
         {
+            if (!TryResolveTenant(httpContext, tenantContext))
+            {
+                return Results.BadRequest(new { message = "Tenant is required to generate reports" });
+            }
+
             // Validate inputs
             if (year < 2020 || year > 2100)
             {
@@ -61,10 +69,16 @@ public static class ReportEndpoints
         [FromQuery] DateTime? startDate,
         [FromQuery] DateTime? endDate,
         HttpContext httpContext,
+        ITenantContext tenantContext,
         IReportService reportService)
     {
         try
         {
+            if (!TryResolveTenant(httpContext, tenantContext))
+            {
+                return Results.BadRequest(new { message = "Tenant is required to generate reports" });
+            }
+
             // Default date range if not provided
             var start = startDate ?? DateTime.Today;
             var end = endDate ?? DateTime.Today.AddMonths(1);
@@ -101,10 +115,17 @@ public static class ReportEndpoints
     private static async Task<IResult> GetTaskAssignments(
         [FromQuery] DateTime? startDate,
         [FromQuery] DateTime? endDate,
+        HttpContext httpContext,
+        ITenantContext tenantContext,
         IReportService reportService)
     {
         try
         {
+            if (!TryResolveTenant(httpContext, tenantContext))
+            {
+                return Results.BadRequest(new { message = "Tenant is required to generate reports" });
+            }
+
             // Default date range if not provided
             var start = startDate ?? DateTime.Today;
             var end = endDate ?? DateTime.Today.AddMonths(1);
@@ -121,5 +142,38 @@ public static class ReportEndpoints
         {
             return Results.Problem($"Failed to generate report: {ex.Message}");
         }
+    }
+
+    private static bool TryResolveTenant(HttpContext httpContext, ITenantContext tenantContext)
+    {
+        if (tenantContext.TenantId.HasValue)
+        {
+            return true;
+        }
+
+        var tenantClaim = httpContext.User.FindFirst("tenant_id")?.Value
+            ?? httpContext.User.FindFirst("TenantId")?.Value;
+
+        if (int.TryParse(tenantClaim, out var claimTenantId))
+        {
+            tenantContext.TenantId = claimTenantId;
+            return true;
+        }
+
+        if (httpContext.Request.Headers.TryGetValue("X-Tenant-Id", out var tenantHeader) &&
+            int.TryParse(tenantHeader.FirstOrDefault(), out var headerTenantId))
+        {
+            tenantContext.TenantId = headerTenantId;
+            return true;
+        }
+
+        if (httpContext.Request.Query.TryGetValue("tenantId", out var tenantQuery) &&
+            int.TryParse(tenantQuery.FirstOrDefault(), out var queryTenantId))
+        {
+            tenantContext.TenantId = queryTenantId;
+            return true;
+        }
+
+        return false;
     }
 }

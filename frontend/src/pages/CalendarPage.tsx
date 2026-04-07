@@ -121,6 +121,36 @@ const CalendarPage: React.FC = () => {
     return statusMap[status] || 'status-pending';
   };
 
+  const actionButtonBaseStyle: React.CSSProperties = {
+    display: 'inline-flex',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: '8px',
+    padding: '12px 18px',
+    borderRadius: '12px',
+    border: '1px solid transparent',
+    fontSize: '14px',
+    fontWeight: 600,
+    letterSpacing: '-0.01em',
+    cursor: 'pointer',
+    transition: 'all 0.2s ease',
+    boxShadow: '0 8px 20px rgba(15, 23, 42, 0.08)'
+  };
+
+  const secondaryButtonStyle: React.CSSProperties = {
+    ...actionButtonBaseStyle,
+    background: 'white',
+    color: '#1F2937',
+    borderColor: '#D1D5DB'
+  };
+
+  const primaryButtonStyle: React.CSSProperties = {
+    ...actionButtonBaseStyle,
+    background: 'linear-gradient(135deg, #2563EB, #4F46E5)',
+    color: 'white',
+    boxShadow: '0 12px 24px rgba(79, 70, 229, 0.28)'
+  };
+
   return (
     <div className="page-container calendar-print-page">
       <div className="page-header no-print">
@@ -128,25 +158,35 @@ const CalendarPage: React.FC = () => {
           <h1>📅 Ministry Calendar</h1>
           <p>View and manage ministry assignments</p>
         </div>
-        <div style={{ display: 'flex', gap: '12px' }}>
+        <div style={{ display: 'flex', gap: '12px', flexWrap: 'wrap', alignItems: 'center' }}>
           <button
             onClick={() => navigate('/dashboard')}
             className="btn-secondary"
+            style={secondaryButtonStyle}
           >
-            ← Back to Dashboard
+            <span style={{ fontSize: '16px', lineHeight: 1 }}>←</span>
+            <span>Back to Dashboard</span>
           </button>
           <button
             onClick={handlePrintCalendar}
             className="btn-secondary"
+            style={secondaryButtonStyle}
           >
-            🖨️ Print Calendar
+            <span style={{ fontSize: '16px', lineHeight: 1 }}>🖨️</span>
+            <span>Print Calendar</span>
           </button>
           <button
             onClick={handleExportCalendar}
             className="btn-secondary"
             disabled={exporting}
+            style={{
+              ...secondaryButtonStyle,
+              opacity: exporting ? 0.75 : 1,
+              cursor: exporting ? 'not-allowed' : 'pointer'
+            }}
           >
-            {exporting ? 'Exporting...' : '📤 Export CSV'}
+            <span style={{ fontSize: '16px', lineHeight: 1 }}>{exporting ? '⏳' : '📤'}</span>
+            <span>{exporting ? 'Exporting...' : 'Export CSV'}</span>
           </button>
           <button
             onClick={() => {
@@ -155,8 +195,10 @@ const CalendarPage: React.FC = () => {
               setIsModalOpen(true);
             }}
             className="btn-primary"
+            style={primaryButtonStyle}
           >
-            + New Assignment
+            <span style={{ fontSize: '18px', lineHeight: 1 }}>+</span>
+            <span>New Assignment</span>
           </button>
         </div>
       </div>

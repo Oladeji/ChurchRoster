@@ -1,13 +1,15 @@
 import apiService from './api.service';
-import type { AuthResponse, LoginRequest, RegisterRequest, User } from '../types';
+import type { AuthResponse, LoginRequest, RegisterRequest, Tenant, User } from '../types';
 
 class AuthService {
   async login(credentials: LoginRequest): Promise<AuthResponse> {
     const response = await apiService.post<AuthResponse>('/auth/login', credentials);
     if (response.token) {
       localStorage.setItem('authToken', response.token);
+      localStorage.setItem('tenantId', response.tenantId.toString());
       localStorage.setItem('user', JSON.stringify({
         userId: response.userId,
+        tenantId: response.tenantId,
         name: response.name,
         email: response.email,
         role: response.role,
@@ -21,8 +23,10 @@ class AuthService {
     const response = await apiService.post<AuthResponse>('/auth/register', userData);
     if (response.token) {
       localStorage.setItem('authToken', response.token);
+      localStorage.setItem('tenantId', response.tenantId.toString());
       localStorage.setItem('user', JSON.stringify({
         userId: response.userId,
+        tenantId: response.tenantId,
         name: response.name,
         email: response.email,
         role: response.role,
@@ -34,7 +38,17 @@ class AuthService {
 
   logout(): void {
     localStorage.removeItem('authToken');
+    localStorage.removeItem('tenantId');
     localStorage.removeItem('user');
+  }
+
+  async getTenants(): Promise<Tenant[]> {
+    return await apiService.get<Tenant[]>('/tenants');
+  }
+
+  getSelectedTenantId(): number | null {
+    const tenantId = localStorage.getItem('tenantId');
+    return tenantId ? Number(tenantId) : null;
   }
 
   getCurrentUser(): User | null {

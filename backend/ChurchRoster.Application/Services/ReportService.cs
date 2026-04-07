@@ -13,11 +13,13 @@ namespace ChurchRoster.Application.Services;
 public class ReportService : IReportService
 {
     private readonly AppDbContext _context;
+    private readonly ITenantContext _tenantContext;
     private readonly ILogger<ReportService> _logger;
 
-    public ReportService(AppDbContext context, ILogger<ReportService> logger)
+    public ReportService(AppDbContext context, ITenantContext tenantContext, ILogger<ReportService> logger)
     {
         _context = context;
+        _tenantContext = tenantContext;
         _logger = logger;
 
         // Configure QuestPDF license (Community for open-source/non-commercial)
@@ -28,6 +30,9 @@ public class ReportService : IReportService
     {
         try
         {
+            if (!_tenantContext.TenantId.HasValue)
+                throw new InvalidOperationException("Tenant context is required to generate reports");
+
             // Get data - PostgreSQL requires UTC DateTimes
             var startDate = DateTime.SpecifyKind(new DateTime(year, month, 1), DateTimeKind.Utc);
             var endDate = DateTime.SpecifyKind(startDate.AddMonths(1).AddDays(-1), DateTimeKind.Utc);
@@ -230,11 +235,14 @@ public class ReportService : IReportService
     {
         try
         {
+            if (!_tenantContext.TenantId.HasValue)
+                throw new InvalidOperationException("Tenant context is required to generate reports");
+
             // Ensure UTC DateTimes for PostgreSQL
             var utcStartDate = DateTime.SpecifyKind(startDate, DateTimeKind.Utc);
             var utcEndDate = DateTime.SpecifyKind(endDate, DateTimeKind.Utc);
 
-            var user = await _context.Users.FindAsync(userId);
+            var user = await _context.Users.FirstOrDefaultAsync(u => u.UserId == userId);
             if (user == null)
             {
                 throw new ArgumentException($"User with ID {userId} not found");
@@ -377,6 +385,9 @@ public class ReportService : IReportService
     {
         try
         {
+            if (!_tenantContext.TenantId.HasValue)
+                throw new InvalidOperationException("Tenant context is required to generate reports");
+
             // Ensure UTC DateTimes for PostgreSQL
             var utcStartDate = DateTime.SpecifyKind(startDate, DateTimeKind.Utc);
             var utcEndDate = DateTime.SpecifyKind(endDate, DateTimeKind.Utc);

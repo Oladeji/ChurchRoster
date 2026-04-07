@@ -3,6 +3,7 @@ namespace ChurchRoster.Core.Entities
     public class Invitation
     {
         public int InvitationId { get; set; }
+        public int TenantId { get; set; }
         public string Email { get; set; } = string.Empty;
         public string Name { get; set; } = string.Empty;
         public string Phone { get; set; } = string.Empty;
@@ -14,6 +15,7 @@ namespace ChurchRoster.Core.Entities
         public DateTime? UsedAt { get; set; }
         public int? UserId { get; set; } // Set when invitation is accepted
         public int CreatedBy { get; set; }
+        public Tenant Tenant { get; set; } = null!;
         public User? CreatedByUser { get; set; }
         public User? User { get; set; }
     }

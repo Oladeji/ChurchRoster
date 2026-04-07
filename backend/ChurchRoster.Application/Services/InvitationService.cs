@@ -11,13 +11,15 @@ namespace ChurchRoster.Application.Services
     public class InvitationService : IInvitationService
     {
         private readonly AppDbContext _context;
+        private readonly ITenantContext _tenantContext;
         private readonly IEmailService _emailService;
         private readonly IAuthService _authService;
         private readonly ILogger<InvitationService> _logger;
 
-        public InvitationService(AppDbContext context, IEmailService emailService, IAuthService authService, ILogger<InvitationService> logger)
+        public InvitationService(AppDbContext context, ITenantContext tenantContext, IEmailService emailService, IAuthService authService, ILogger<InvitationService> logger)
         {
             _context = context;
+            _tenantContext = tenantContext;
             _emailService = emailService;
             _authService = authService;
             _logger = logger;
@@ -29,8 +31,14 @@ namespace ChurchRoster.Application.Services
             _logger.LogInformation("Email: {Email}, Name: {Name}, Role: {Role}, CreatedBy: {CreatedBy}", 
                 request.Email, request.Name, request.Role, createdByUserId);
 
+            if (!_tenantContext.TenantId.HasValue)
+            {
+                _logger.LogWarning("❌ Cannot send invitation without a resolved tenant context");
+                return null;
+            }
+
             // Check if user already exists
-            var existingUser = await _context.Users.FirstOrDefaultAsync(u => u.Email == request.Email);
+            var existingUser = await _context.Users.FirstOrDefaultAsync(u => u.TenantId == _tenantContext.TenantId && u.Email == request.Email);
             if (existingUser != null)
             {
                 _logger.LogWarning("❌ User already exists with email: {Email}", request.Email);
@@ -39,7 +47,7 @@ namespace ChurchRoster.Application.Services
 
             // Check if there's already a pending invitation
             var existingInvitation = await _context.Invitations
-                .FirstOrDefaultAsync(i => i.Email == request.Email && !i.IsUsed && i.ExpiresAt > DateTime.UtcNow);
+                .FirstOrDefaultAsync(i => i.TenantId == _tenantContext.TenantId && i.Email == request.Email && !i.IsUsed && i.ExpiresAt > DateTime.UtcNow);
 
             if (existingInvitation != null)
             {
@@ -55,6 +63,7 @@ namespace ChurchRoster.Application.Services
 
             var invitation = new Invitation
             {
+                TenantId = _tenantContext.TenantId.Value,
                 Email = request.Email,
                 Name = request.Name,
                 Phone = request.Phone,
@@ -127,7 +136,7 @@ namespace ChurchRoster.Application.Services
             }
 
             // Check if user already exists
-            var existingUser = await _context.Users.FirstOrDefaultAsync(u => u.Email == invitation.Email);
+            var existingUser = await _context.Users.FirstOrDefaultAsync(u => u.TenantId == invitation.TenantId && u.Email == invitation.Email);
             if (existingUser != null)
             {
                 return false; // User already exists
@@ -135,6 +144,7 @@ namespace ChurchRoster.Application.Services
 
             // Create the user account using AuthService
             var registerRequest = new DTOs.Auth.RegisterRequest(
+                invitation.TenantId,
                 invitation.Name,
                 invitation.Email,
                 request.Password,
@@ -149,7 +159,7 @@ namespace ChurchRoster.Application.Services
             }
 
             // Update the user's role to match the invitation
-            var user = await _context.Users.FindAsync(authResponse.UserId);
+            var user = await _context.Users.FirstOrDefaultAsync(u => u.UserId == authResponse.UserId);
             if (user != null)
             {
                 user.Role = invitation.Role;

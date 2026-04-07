@@ -1,5 +1,6 @@
 using Asp.Versioning;
 using ChurchRoster.Api;
+using ChurchRoster.Api.Middleware;
 using Microsoft.AspNetCore.Cors.Infrastructure;
 using Microsoft.AspNetCore.HttpOverrides;
 using Scalar.AspNetCore;
@@ -95,6 +96,7 @@ app.UseCors("CorsConstants.Cors_Policy");
 
 // Add Authentication & Authorization middleware
 app.UseAuthentication();
+app.UseMiddleware<TenantResolutionMiddleware>();
 app.UseAuthorization();
 
 // Add request logging middleware

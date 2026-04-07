@@ -17,8 +17,12 @@ class ApiService {
     this.api.interceptors.request.use(
       (config) => {
         const token = localStorage.getItem('authToken');
+        const tenantId = localStorage.getItem('tenantId');
         if (token) {
           config.headers.Authorization = `Bearer ${token}`;
+        }
+        if (tenantId) {
+          config.headers['X-Tenant-Id'] = tenantId;
         }
         return config;
       },
@@ -31,9 +35,13 @@ class ApiService {
     this.api.interceptors.response.use(
       (response) => response,
       (error) => {
-        if (error.response?.status === 401) {
+        const requestUrl = error.config?.url as string | undefined;
+        const isAuthRequest = requestUrl?.includes('/auth/login') || requestUrl?.includes('/auth/register');
+
+        if (error.response?.status === 401 && !isAuthRequest) {
           // Redirect to login if unauthorized
           localStorage.removeItem('authToken');
+          localStorage.removeItem('tenantId');
           localStorage.removeItem('user');
           window.location.href = '/login';
         }
@@ -47,12 +55,12 @@ class ApiService {
     return response.data;
   }
 
-  async post<T>(url: string, data?: any, config?: AxiosRequestConfig): Promise<T> {
+  async post<T>(url: string, data?: unknown, config?: AxiosRequestConfig): Promise<T> {
     const response = await this.api.post<T>(url, data, config);
     return response.data;
   }
 
-  async put<T>(url: string, data?: any, config?: AxiosRequestConfig): Promise<T> {
+  async put<T>(url: string, data?: unknown, config?: AxiosRequestConfig): Promise<T> {
     const response = await this.api.put<T>(url, data, config);
     return response.data;
   }
@@ -62,7 +70,7 @@ class ApiService {
     return response.data;
   }
 
-  async patch<T>(url: string, data?: any, config?: AxiosRequestConfig): Promise<T> {
+  async patch<T>(url: string, data?: unknown, config?: AxiosRequestConfig): Promise<T> {
     const response = await this.api.patch<T>(url, data, config);
     return response.data;
   }

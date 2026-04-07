@@ -27,9 +27,13 @@ const ReportsPage: React.FC = () => {
 
   const fetchUsers = async () => {
     try {
-      const token = localStorage.getItem('token');
+      const token = localStorage.getItem('authToken');
+      const tenantId = localStorage.getItem('tenantId');
       const response = await fetch(API_URL + '/members', {
-        headers: { Authorization: 'Bearer ' + token }
+        headers: {
+          Authorization: 'Bearer ' + token,
+          ...(tenantId ? { 'X-Tenant-Id': tenantId } : {})
+        }
       });
       if (response.ok) {
         const data = await response.json();
@@ -43,8 +47,14 @@ const ReportsPage: React.FC = () => {
   const downloadPDF = async (url: string, filename: string, reportType: string) => {
     try {
       setLoading(reportType);
-      const token = localStorage.getItem('token');
-      const response = await fetch(url, { headers: { Authorization: 'Bearer ' + token } });
+      const token = localStorage.getItem('authToken');
+      const tenantId = localStorage.getItem('tenantId');
+      const response = await fetch(url, {
+        headers: {
+          Authorization: 'Bearer ' + token,
+          ...(tenantId ? { 'X-Tenant-Id': tenantId } : {})
+        }
+      });
       if (!response.ok) throw new Error('Failed');
       const blob = await response.blob();
       const downloadUrl = window.URL.createObjectURL(blob);

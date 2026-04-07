@@ -29,10 +29,11 @@ namespace ChurchRoster.Application.Services
         {
             try
             {
-                _logger.LogInformation("Login attempt for email: {Email}", request.Email);
+                _logger.LogInformation("Login attempt for tenant: {TenantId}, email: {Email}", request.TenantId, request.Email);
 
                 var user = await _context.Users
-                    .FirstOrDefaultAsync(u => u.Email == request.Email);
+                    .IgnoreQueryFilters()
+                    .FirstOrDefaultAsync(u => u.TenantId == request.TenantId && u.Email == request.Email);
 
                 if (user == null)
                 {
@@ -56,7 +57,7 @@ namespace ChurchRoster.Application.Services
 
                 _logger.LogDebug("Password verified, generating JWT token...");
 
-                var token = GenerateJwtToken(user.UserId, user.Email, user.Role);
+                var token = GenerateJwtToken(user.UserId, user.TenantId, user.Email, user.Role);
 
                 var expirationMinutes = int.Parse(_configuration["JwtSettings:ExpirationInMinutes"] ?? "1440");
                 var expiresAt = DateTime.UtcNow.AddMinutes(expirationMinutes);
@@ -65,6 +66,7 @@ namespace ChurchRoster.Application.Services
 
                 return new AuthResponse(
                     user.UserId,
+                    user.TenantId,
                     user.Name,
                     user.Email,
                     user.Role,
@@ -82,7 +84,9 @@ namespace ChurchRoster.Application.Services
         public async Task<AuthResponse?> RegisterAsync(RegisterRequest request)
         {
             // Check if email already exists
-            if (await _context.Users.AnyAsync(u => u.Email == request.Email))
+            if (await _context.Users
+                .IgnoreQueryFilters()
+                .AnyAsync(u => u.TenantId == request.TenantId && u.Email == request.Email))
                 return null;
 
             // Validate password requirements (min 8 chars, uppercase, lowercase, number)
@@ -91,6 +95,7 @@ namespace ChurchRoster.Application.Services
 
             var user = new User
             {
+                TenantId = request.TenantId,
                 Name = request.Name,
                 Email = request.Email,
                 Phone = request.Phone,
@@ -105,13 +110,14 @@ namespace ChurchRoster.Application.Services
             _context.Users.Add(user);
             await _context.SaveChangesAsync();
 
-            var token = GenerateJwtToken(user.UserId, user.Email, user.Role);
+            var token = GenerateJwtToken(user.UserId, user.TenantId, user.Email, user.Role);
 
             var expirationMinutes = int.Parse(_configuration["JwtSettings:ExpirationInMinutes"] ?? "1440");
             var expiresAt = DateTime.UtcNow.AddMinutes(expirationMinutes);
 
             return new AuthResponse(
                 user.UserId,
+                user.TenantId,
                 user.Name,
                 user.Email,
                 user.Role,
@@ -120,11 +126,11 @@ namespace ChurchRoster.Application.Services
             );
         }
 
-        public string GenerateJwtToken(int userId, string email, string role)
+        public string GenerateJwtToken(int userId, int tenantId, string email, string role)
         {
             try
             {
-                _logger.LogDebug("Generating JWT token for user: {UserId}, email: {Email}, role: {Role}", userId, email, role);
+                _logger.LogDebug("Generating JWT token for user: {UserId}, tenant: {TenantId}, email: {Email}, role: {Role}", userId, tenantId, email, role);
 
                 var jwtSettings = _configuration.GetSection("JwtSettings");
 
@@ -149,6 +155,8 @@ namespace ChurchRoster.Application.Services
                 {
                     new Claim(JwtRegisteredClaimNames.Sub, userId.ToString()),
                     new Claim(ClaimTypes.NameIdentifier, userId.ToString()),
+                    new Claim("tenant_id", tenantId.ToString()),
+                    new Claim("TenantId", tenantId.ToString()),
                     new Claim(JwtRegisteredClaimNames.Email, email),
                     new Claim(ClaimTypes.Role, role),
                     new Claim(JwtRegisteredClaimNames.Jti, Guid.NewGuid().ToString())
