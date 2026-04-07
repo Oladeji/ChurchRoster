@@ -198,6 +198,11 @@ PublishScripts/
 # The packages folder can be ignored because of Package Restore
 **/[Pp]ackages/*
 # except build/, which is used as an MSBuild target.
+
+# App configuration and environment files
+backend/ChurchRoster.Api/appsettings.json
+frontend/.env
+frontend/.env.example
 !**/[Pp]ackages/build/
 # Uncomment if necessary however generally it will be regenerated when needed
 #!**/[Pp]ackages/repositories.config
