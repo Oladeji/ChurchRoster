@@ -2,6 +2,7 @@ import React from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useAuth } from '../context/AuthContext';
 import { useNotifications } from '../hooks/useNotifications';
+import ProposalDashboardWidget from '../components/ProposalDashboardWidget';
 
 const Dashboard: React.FC = () => {
   const { user, isAdmin, logout } = useAuth();
@@ -108,6 +109,7 @@ const Dashboard: React.FC = () => {
               <h3>📊 Reports</h3>
               <p>Generate and print ministry reports</p>
             </div>
+            <ProposalDashboardWidget />
           </div>
         </div>
       ) : (

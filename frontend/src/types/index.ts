@@ -119,6 +119,68 @@ export interface CalendarEvent {
   assignment: Assignment;
 }
 
+// Proposal Types
+export type ProposalStatus = 'Processing' | 'Draft' | 'Published' | 'Archived';
+export type ProposalItemStatus = 'Proposed' | 'Skipped';
+
+export interface ProposalSummary {
+  proposalId: number;
+  name: string;
+  status: ProposalStatus;
+  dateRangeStart: string;
+  dateRangeEnd: string;
+  generatedAt: string;
+  publishedAt?: string;
+  itemCount: number;
+}
+
+export interface ProposalItem {
+  itemId: number;
+  taskId: number;
+  taskName: string;
+  userId: number;
+  memberName: string;
+  eventDate: string;
+  status: ProposalItemStatus;
+  skipReason?: string;
+}
+
+export interface SkipLog {
+  logId: number;
+  taskId: number;
+  eventDate: string;
+  reason: string;
+  loggedAt: string;
+}
+
+export interface ProposalDetail {
+  proposalId: number;
+  name: string;
+  status: ProposalStatus;
+  dateRangeStart: string;
+  dateRangeEnd: string;
+  generatedAt: string;
+  publishedAt?: string;
+  items: ProposalItem[];
+  skipLogs: SkipLog[];
+}
+
+export interface GenerateProposalRequest {
+  name: string;
+  dateRangeStart: string;
+  dateRangeEnd: string;
+}
+
+export interface UpdateProposalItemRequest {
+  userId: number;
+}
+
+export interface AddProposalItemRequest {
+  taskId: number;
+  userId: number;
+  eventDate: string;
+}
+
 // Filter Types
 export interface AssignmentFilter {
   userId?: number;

@@ -13,6 +13,9 @@ import MyAssignmentsPage from './pages/MyAssignmentsPage';
 import AcceptInvitation from './pages/AcceptInvitation';
 import ReportsPage from './pages/ReportsPage';
 import MemberReportPage from './pages/MemberReportPage';
+import ProposalsPage from './pages/ProposalsPage';
+import GenerateProposalPage from './pages/GenerateProposalPage';
+import ProposalDetailPage from './pages/ProposalDetailPage';
 import './App.css';
 
 function App() {
@@ -99,6 +102,31 @@ function App() {
             element={
               <ProtectedRoute>
                 <MemberReportPage />
+              </ProtectedRoute>
+            }
+          />
+
+          <Route
+            path="/proposals"
+            element={
+              <ProtectedRoute requireAdmin={true}>
+                <ProposalsPage />
+              </ProtectedRoute>
+            }
+          />
+          <Route
+            path="/proposals/generate"
+            element={
+              <ProtectedRoute requireAdmin={true}>
+                <GenerateProposalPage />
+              </ProtectedRoute>
+            }
+          />
+          <Route
+            path="/proposals/:id"
+            element={
+              <ProtectedRoute requireAdmin={true}>
+                <ProposalDetailPage />
               </ProtectedRoute>
             }
           />
