@@ -1,4 +1,5 @@
 using ChurchRoster.Core.Entities;
+using ChurchRoster.Core.Entities.Proposals;
 using Microsoft.EntityFrameworkCore;
 
 namespace ChurchRoster.Infrastructure.Data;
@@ -19,6 +20,9 @@ public class AppDbContext : DbContext
     public DbSet<MinistryTask> Tasks { get; set; }
     public DbSet<Assignment> Assignments { get; set; }
     public DbSet<Invitation> Invitations { get; set; }
+    public DbSet<RosterProposal> RosterProposals { get; set; }
+    public DbSet<RosterProposalItem> RosterProposalItems { get; set; }
+    public DbSet<ProposalSkipLog> ProposalSkipLogs { get; set; }
 
     protected override void OnModelCreating(ModelBuilder modelBuilder)
     {
@@ -241,6 +245,96 @@ public class AppDbContext : DbContext
             entity.HasQueryFilter(e => _tenantContext.TenantId != null && e.TenantId == _tenantContext.TenantId);
         });
 
+        // Configure RosterProposal entity
+        modelBuilder.Entity<RosterProposal>(entity =>
+        {
+            entity.ToTable("roster_proposals");
+            entity.HasKey(e => e.ProposalId);
+            entity.Property(e => e.ProposalId).HasColumnName("proposal_id");
+            entity.Property(e => e.TenantId).HasColumnName("tenant_id");
+            entity.Property(e => e.Name).HasColumnName("name").HasMaxLength(255).IsRequired();
+            entity.Property(e => e.Status)
+                .HasColumnName("status")
+                .HasMaxLength(50)
+                .HasDefaultValue(ProposalStatus.Processing)
+                .HasConversion<string>();
+            entity.Property(e => e.DateRangeStart).HasColumnName("date_range_start");
+            entity.Property(e => e.DateRangeEnd).HasColumnName("date_range_end");
+            entity.Property(e => e.GeneratedAt).HasColumnName("generated_at").HasDefaultValueSql("NOW()");
+            entity.Property(e => e.PublishedAt).HasColumnName("published_at");
+            entity.Property(e => e.CreatedByUserId).HasColumnName("created_by_user_id");
+
+            entity.HasOne(e => e.Tenant)
+                .WithMany(t => t.Proposals)
+                .HasForeignKey(e => e.TenantId)
+                .OnDelete(DeleteBehavior.Restrict);
+
+            entity.HasOne(e => e.CreatedByUser)
+                .WithMany()
+                .HasForeignKey(e => e.CreatedByUserId)
+                .OnDelete(DeleteBehavior.Restrict);
+
+            entity.HasMany(e => e.Items)
+                .WithOne(i => i.Proposal)
+                .HasForeignKey(i => i.ProposalId)
+                .OnDelete(DeleteBehavior.Cascade);
+
+            entity.HasMany(e => e.SkipLogs)
+                .WithOne(l => l.Proposal)
+                .HasForeignKey(l => l.ProposalId)
+                .OnDelete(DeleteBehavior.Cascade);
+
+            entity.HasIndex(e => e.TenantId).HasDatabaseName("idx_roster_proposals_tenant");
+            entity.HasIndex(e => new { e.TenantId, e.Status }).HasDatabaseName("idx_roster_proposals_tenant_status");
+
+            entity.HasQueryFilter(e => _tenantContext.TenantId != null && e.TenantId == _tenantContext.TenantId);
+        });
+
+        // Configure RosterProposalItem entity
+        modelBuilder.Entity<RosterProposalItem>(entity =>
+        {
+            entity.ToTable("roster_proposal_items");
+            entity.HasKey(e => e.ItemId);
+            entity.Property(e => e.ItemId).HasColumnName("item_id");
+            entity.Property(e => e.ProposalId).HasColumnName("proposal_id");
+            entity.Property(e => e.TaskId).HasColumnName("task_id");
+            entity.Property(e => e.UserId).HasColumnName("user_id");
+            entity.Property(e => e.EventDate).HasColumnName("event_date");
+            entity.Property(e => e.Status)
+                .HasColumnName("status")
+                .HasMaxLength(50)
+                .HasDefaultValue(ProposalItemStatus.Proposed)
+                .HasConversion<string>();
+            entity.Property(e => e.SkipReason).HasColumnName("skip_reason");
+
+            entity.HasOne(e => e.Task)
+                .WithMany()
+                .HasForeignKey(e => e.TaskId)
+                .OnDelete(DeleteBehavior.Restrict);
+
+            entity.HasOne(e => e.User)
+                .WithMany()
+                .HasForeignKey(e => e.UserId)
+                .OnDelete(DeleteBehavior.Restrict);
+
+            entity.HasIndex(e => e.ProposalId).HasDatabaseName("idx_proposal_items_proposal");
+        });
+
+        // Configure ProposalSkipLog entity
+        modelBuilder.Entity<ProposalSkipLog>(entity =>
+        {
+            entity.ToTable("proposal_skip_logs");
+            entity.HasKey(e => e.LogId);
+            entity.Property(e => e.LogId).HasColumnName("log_id");
+            entity.Property(e => e.ProposalId).HasColumnName("proposal_id");
+            entity.Property(e => e.TaskId).HasColumnName("task_id");
+            entity.Property(e => e.EventDate).HasColumnName("event_date");
+            entity.Property(e => e.Reason).HasColumnName("reason").IsRequired();
+            entity.Property(e => e.LoggedAt).HasColumnName("logged_at").HasDefaultValueSql("NOW()");
+
+            entity.HasIndex(e => e.ProposalId).HasDatabaseName("idx_skip_logs_proposal");
+        });
+
         // Seed initial data
         SeedData(modelBuilder);
     }
@@ -357,6 +451,11 @@ public class AppDbContext : DbContext
             {
                 if (entry.State == EntityState.Added && userSkill.TenantId == default && _tenantContext.TenantId.HasValue)
                     userSkill.TenantId = _tenantContext.TenantId.Value;
+            }
+            else if (entry.Entity is RosterProposal proposal)
+            {
+                if (entry.State == EntityState.Added && proposal.TenantId == default && _tenantContext.TenantId.HasValue)
+                    proposal.TenantId = _tenantContext.TenantId.Value;
             }
         }
     }

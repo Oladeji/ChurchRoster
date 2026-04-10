@@ -1,3 +1,5 @@
+using ChurchRoster.Core.Entities.Proposals;
+
 namespace ChurchRoster.Core.Entities;
 
 public class Tenant
@@ -14,4 +16,5 @@ public class Tenant
     public ICollection<MinistryTask> Tasks { get; set; } = new List<MinistryTask>();
     public ICollection<Assignment> Assignments { get; set; } = new List<Assignment>();
     public ICollection<Invitation> Invitations { get; set; } = new List<Invitation>();
+    public ICollection<RosterProposal> Proposals { get; set; } = new List<RosterProposal>();
 }

@@ -19,13 +19,13 @@ builder.Logging.AddFilter("Microsoft.EntityFrameworkCore.Infrastructure", LogLev
 builder.Logging.AddFilter("ChurchRoster", LogLevel.Debug);
 
 // Add PORT support for Render
-var port = Environment.GetEnvironmentVariable("PORT") ?? "8080";
-//builder.WebHost.UseUrls($"http://0.0.0.0:{port}");
+var port = Environment.GetEnvironmentVariable("PORT") ?? "7288";
+builder.WebHost.UseUrls($"http://0.0.0.0:{port}");
 
 // Log startup configuration
 var logger = LoggerFactory.Create(config => config.AddConsole()).CreateLogger("Startup");
 logger.LogInformation("=== Church Roster API Starting ===");
-logger.LogInformation($"Port: {port}");
+//logger.LogInformation($"Port: {port}");
 logger.LogInformation($"Environment: {builder.Environment.EnvironmentName}");
 
 // Log connection string (masked)
@@ -125,7 +125,7 @@ versionGroup.RegisterEndpoints();
 //app.UseHttpsRedirection();
 
 app.Logger.LogInformation("=== Church Roster API Started Successfully ===");
-app.Logger.LogInformation($"Listening on: http://0.0.0.0:{port}");
+//app.Logger.LogInformation($"Listening on: http://0.0.0.0:{port}");
 
 app.Run();
 

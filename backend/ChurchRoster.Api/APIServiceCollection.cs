@@ -2,7 +2,9 @@
 using ChurchRoster.Api.BackgroundServices;
 using ChurchRoster.Application.Interfaces;
 using ChurchRoster.Application.Services;
+using ChurchRoster.Core.Entities.Proposals;
 using ChurchRoster.Infrastructure.Data;
+using ChurchRoster.Infrastructure.Services.Proposals;
 using Microsoft.AspNetCore.Authentication.JwtBearer;
 using Microsoft.AspNetCore.Cors.Infrastructure;
 using Microsoft.AspNetCore.Http.Features;
@@ -10,6 +12,7 @@ using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Options;
 using Microsoft.IdentityModel.Tokens;
 using System.Text;
+using System.Threading.Channels;
 
 namespace ChurchRoster.Api
 {
@@ -84,10 +87,26 @@ namespace ChurchRoster.Api
             services.AddScoped<IInvitationService, InvitationService>();
             services.AddScoped<INotificationService, NotificationService>();
             services.AddScoped<IReportService, ReportService>();
+            services.AddScoped<IProposalService, ProposalService>();
 
             // Add Background Services
             services.AddHostedService<AssignmentReminderService>();
             services.AddHostedService<AssignmentStatusUpdateService>();
+
+            // AI Proposal Module
+            services.Configure<GitHubModelsOptions>(configuration.GetSection("GitHubModels"));
+
+            // Bounded channel — capacity 10, writer blocks if full (prevents memory pressure)
+            services.AddSingleton(Channel.CreateBounded<int>(new BoundedChannelOptions(10)
+            {
+                FullMode = BoundedChannelFullMode.Wait,
+                SingleReader = true,   // only ProposalGenerationJob reads
+                SingleWriter = false   // multiple HTTP requests may write
+            }));
+
+            services.AddScoped<IProposalAgentTools, ProposalAgentTools>();
+            services.AddScoped<ProposalAgentService>();
+            services.AddHostedService<ProposalGenerationJob>();
 
             //services.AddExceptionHandler<GlobalExceptionHandler>();
             services.AddProblemDetails(options =>

@@ -16,6 +16,7 @@ namespace ChurchRoster.Api
             app.MapAssignmentEndpoints();
             app.MapInvitationEndpoints();
             app.MapReportEndpoints();
+            app.MapProposalEndpoints();
             app.MapDiagnosticEndpoints();
 
         }

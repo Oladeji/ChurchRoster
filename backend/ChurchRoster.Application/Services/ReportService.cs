@@ -1,5 +1,6 @@
 using ChurchRoster.Application.DTOs.Reports;
 using ChurchRoster.Application.Interfaces;
+using ChurchRoster.Core.Entities.Proposals;
 using ChurchRoster.Infrastructure.Data;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Logging;
@@ -516,6 +517,230 @@ public class ReportService : IReportService
         catch (Exception ex)
         {
             _logger.LogError(ex, "Failed to generate task assignment report");
+            throw;
+        }
+    }
+
+    public async Task<byte[]> GenerateProposalDraftPdfAsync(int proposalId)
+    {
+        try
+        {
+            if (!_tenantContext.TenantId.HasValue)
+                throw new InvalidOperationException("Tenant context is required to generate reports");
+
+            var proposal = await _context.RosterProposals
+                .Include(p => p.Items)
+                    .ThenInclude(i => i.Task)
+                .Include(p => p.Items)
+                    .ThenInclude(i => i.User)
+                .Include(p => p.SkipLogs)
+                .FirstOrDefaultAsync(p => p.ProposalId == proposalId);
+
+            if (proposal == null)
+                throw new ArgumentException($"Proposal with ID {proposalId} not found");
+
+            var itemsByDate = proposal.Items
+                .OrderBy(i => i.EventDate)
+                .ThenBy(i => i.Task.TaskName)
+                .GroupBy(i => i.EventDate)
+                .OrderBy(g => g.Key)
+                .ToList();
+
+            var document = Document.Create(container =>
+            {
+                container.Page(page =>
+                {
+                    page.Size(PageSizes.A4);
+                    page.Margin(2, Unit.Centimetre);
+                    page.PageColor(Colors.White);
+                    page.DefaultTextStyle(x => x.FontSize(10));
+
+                    // DRAFT watermark on every page
+                    page.Foreground()
+                        .AlignCenter()
+                        .AlignMiddle()
+                        .Rotate(-45)
+                        .Text("DRAFT")
+                        .FontSize(120)
+                        .Bold()
+                        .FontColor("#55FF000020");
+
+                    page.Header()
+                        .PaddingBottom(10)
+                        .BorderBottom(1)
+                        .BorderColor(Colors.Grey.Medium)
+                        .Column(column =>
+                        {
+                            column.Item().AlignCenter().Text("Church Ministry Roster — DRAFT PROPOSAL")
+                                .FontSize(18)
+                                .Bold()
+                                .FontColor(Colors.Blue.Darken3);
+
+                            column.Item().AlignCenter().Text(proposal.Name)
+                                .FontSize(14)
+                                .SemiBold();
+
+                            column.Item().AlignCenter()
+                                .Text($"{proposal.DateRangeStart:MMM dd, yyyy} – {proposal.DateRangeEnd:MMM dd, yyyy}")
+                                .FontSize(11);
+
+                            column.Item().AlignCenter().Row(row =>
+                            {
+                                row.AutoItem()
+                                    .Background(Colors.Orange.Lighten3)
+                                    .Border(1)
+                                    .BorderColor(Colors.Orange.Darken2)
+                                    .Padding(3)
+                                    .Text("DRAFT — NOT YET PUBLISHED")
+                                    .FontSize(9)
+                                    .Bold()
+                                    .FontColor(Colors.Orange.Darken3);
+                            });
+
+                            column.Item().AlignCenter().Text($"Generated: {DateTime.Now:MMM dd, yyyy hh:mm tt}")
+                                .FontSize(8)
+                                .FontColor(Colors.Grey.Darken1);
+                        });
+
+                    page.Content()
+                        .PaddingVertical(15)
+                        .Column(column =>
+                        {
+                            if (!proposal.Items.Any())
+                            {
+                                column.Item().AlignCenter().PaddingTop(50).Text("No items in this proposal yet")
+                                    .FontSize(14)
+                                    .FontColor(Colors.Grey.Darken1);
+                            }
+                            else
+                            {
+                                foreach (var dateGroup in itemsByDate)
+                                {
+                                    column.Item().PaddingBottom(12).Element(cont =>
+                                    {
+                                        cont.Column(dateColumn =>
+                                        {
+                                            dateColumn.Item()
+                                                .Background(Colors.Blue.Lighten4)
+                                                .Padding(7)
+                                                .Text($"{dateGroup.Key:dddd, MMM dd, yyyy}")
+                                                .FontSize(11)
+                                                .SemiBold();
+
+                                            dateColumn.Item().Table(table =>
+                                            {
+                                                table.ColumnsDefinition(columns =>
+                                                {
+                                                    columns.RelativeColumn(3);  // Task
+                                                    columns.RelativeColumn(2);  // Member
+                                                    columns.ConstantColumn(75); // Status
+                                                });
+
+                                                table.Header(header =>
+                                                {
+                                                    header.Cell().Background(Colors.Grey.Lighten2).Padding(5).Text("Task").SemiBold();
+                                                    header.Cell().Background(Colors.Grey.Lighten2).Padding(5).Text("Assigned To").SemiBold();
+                                                    header.Cell().Background(Colors.Grey.Lighten2).Padding(5).Text("Status").SemiBold();
+                                                });
+
+                                                foreach (var item in dateGroup)
+                                                {
+                                                    var statusColor = item.Status switch
+                                                    {
+                                                        ProposalItemStatus.Proposed => Colors.Yellow.Lighten3,
+                                                        ProposalItemStatus.Skipped  => Colors.Red.Lighten3,
+                                                        _ => Colors.Grey.Lighten3
+                                                    };
+
+                                                    table.Cell().BorderBottom(0.5f).BorderColor(Colors.Grey.Lighten2).Padding(5)
+                                                        .Text(item.Task.TaskName);
+                                                    table.Cell().BorderBottom(0.5f).BorderColor(Colors.Grey.Lighten2).Padding(5)
+                                                        .Text(item.User.Name);
+                                                    table.Cell().BorderBottom(0.5f).BorderColor(Colors.Grey.Lighten2).Padding(5)
+                                                        .Background(statusColor)
+                                                        .Text(item.Status.ToString())
+                                                        .FontSize(9);
+                                                }
+                                            });
+                                        });
+                                    });
+                                }
+
+                                // Skip log section
+                                if (proposal.SkipLogs.Any())
+                                {
+                                    column.Item().PaddingTop(10).BorderTop(1).BorderColor(Colors.Grey.Medium).PaddingTop(10)
+                                        .Column(skipCol =>
+                                        {
+                                            skipCol.Item().Text("Skipped / Conflicts").FontSize(12).SemiBold();
+                                            skipCol.Item().PaddingTop(5).Table(table =>
+                                            {
+                                                table.ColumnsDefinition(columns =>
+                                                {
+                                                    columns.ConstantColumn(90);  // Date
+                                                    columns.RelativeColumn(3);   // Reason
+                                                    columns.ConstantColumn(70);  // Logged
+                                                });
+
+                                                table.Header(header =>
+                                                {
+                                                    header.Cell().Background(Colors.Grey.Lighten2).Padding(5).Text("Date").SemiBold();
+                                                    header.Cell().Background(Colors.Grey.Lighten2).Padding(5).Text("Reason").SemiBold();
+                                                    header.Cell().Background(Colors.Grey.Lighten2).Padding(5).Text("Logged At").SemiBold();
+                                                });
+
+                                                foreach (var log in proposal.SkipLogs.OrderBy(s => s.EventDate))
+                                                {
+                                                    table.Cell().BorderBottom(0.5f).BorderColor(Colors.Grey.Lighten2).Padding(5)
+                                                        .Text(log.EventDate.ToString("MMM dd, yyyy"));
+                                                    table.Cell().BorderBottom(0.5f).BorderColor(Colors.Grey.Lighten2).Padding(5)
+                                                        .Text(log.Reason)
+                                                        .FontColor(Colors.Red.Darken2);
+                                                    table.Cell().BorderBottom(0.5f).BorderColor(Colors.Grey.Lighten2).Padding(5)
+                                                        .Text(log.LoggedAt.ToString("MMM dd HH:mm"))
+                                                        .FontSize(8);
+                                                }
+                                            });
+                                        });
+                                }
+
+                                // Summary
+                                column.Item().PaddingTop(15).BorderTop(1).BorderColor(Colors.Grey.Medium).PaddingTop(10)
+                                    .Row(row =>
+                                    {
+                                        row.RelativeItem().Column(col =>
+                                        {
+                                            col.Item().Text($"Total Items: {proposal.Items.Count}").SemiBold();
+                                                col.Item().Text($"Proposed: {proposal.Items.Count(i => i.Status == ProposalItemStatus.Proposed)}");
+                                        });
+
+                                        row.RelativeItem().Column(col =>
+                                        {
+                                            col.Item().Text($"Skipped: {proposal.Items.Count(i => i.Status == ProposalItemStatus.Skipped)}");
+                                            col.Item().Text($"Conflicts Logged: {proposal.SkipLogs.Count}");
+                                        });
+                                    });
+                            }
+                        });
+
+                    page.Footer()
+                        .AlignCenter()
+                        .Text(text =>
+                        {
+                            text.Span("Page ");
+                            text.CurrentPageNumber();
+                            text.Span(" of ");
+                            text.TotalPages();
+                        });
+                });
+            });
+
+            _logger.LogInformation("Generated proposal draft PDF for proposal {ProposalId}", proposalId);
+            return document.GeneratePdf();
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "Failed to generate proposal draft PDF for proposal {ProposalId}", proposalId);
             throw;
         }
     }
