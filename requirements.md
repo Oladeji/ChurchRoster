@@ -1,6 +1,7 @@
 # 📄 Church Ministry Rostering System  
 ## Complete Requirements Document (Web + Mobile App)  
-**Version 6.0 – FINAL CORRECTION**  
+**Version 7.0** — *Updated April 2026: Added AI-Powered Roster Proposal Module (Addendum, Sections 14–17)*  
+*Previous: v6.0 – FINAL CORRECTION*  
 *Copy this entire document and paste into Word, Google Docs, or save as .txt/.md*
 
 ---
@@ -278,10 +279,261 @@ A: Yes. The system is built to allow Admins to create new skill tags (e.g., `Can
 
 ---
 
-> 🙏 **You're all set!**  
-> This version (v6.0 – FINAL CORRECTION) now accurately reflects:  
+> 🙏 **v6.0 summary:**  
 > ✅ **Tuesday Bible Study** = Restricted (`CanLeadBibleStudy`)  
 > ✅ **Sunday Preaching** = Restricted (`CanLeadPreaching`)  
 > ✅ **All other tasks** = Open to ANY member  
 > ✅ Plus: Mobile App, Accept/Reject Workflow, Configurable Skills, Past Event Automation, Printable Reports, and Weekly/Monthly Views.  
->  
+
+---
+
+## 🤖 14. AI-POWERED ROSTER PROPOSAL MODULE *(Addendum v7.0)*
+
+> **Added:** April 2026  
+> **Scope:** Admin-only feature. Members are not affected by this module.  
+> **Cost:** Zero — uses **GitHub Models** free tier via a GitHub PAT token.  
+> **Generation:** Fully **asynchronous** — the UI never blocks while the AI works.
+
+### 14.1 Purpose
+
+Allow Administrators to auto-generate a full draft roster for any custom date range using an AI agent. The AI agent reads the existing task catalog, member skills, and fairness constraints, then proposes a complete schedule as a **Draft**. The Admin reviews, edits, and — when satisfied — publishes the draft to the live calendar.
+
+Publishing does **not** bypass the existing workflow. Each published assignment starts as **Pending** and members still Accept/Reject as normal.
+
+### 14.2 Updated User Roles
+
+| Role | New Capability |
+|------|----------------|
+| **Administrator** | Generate AI draft proposals, preview/edit them, publish to live calendar, print draft PDF, view proposal history |
+| **Member** | No change — members only see the result after Admin publishes (Pending assignments + push notifications) |
+
+### 14.3 New User Stories
+
+| ID | Role | Story | So that... |
+|----|------|-------|------------|
+| US-PROP-01 | Admin | Generate a roster proposal for a custom date range using AI | I save hours of manual scheduling |
+| US-PROP-02 | Admin | See a "Generating roster…" spinner while the AI works | I know the system is busy and don't click twice |
+| US-PROP-03 | Admin | Preview and edit any item in a draft (add / edit / delete) | I can correct AI errors before publishing |
+| US-PROP-04 | Admin | Publish a draft to the live calendar | Real assignments are created and members are notified |
+| US-PROP-05 | Admin | Download a PDF of the draft with a DRAFT watermark | I can discuss it with leadership before finalising |
+| US-PROP-06 | Admin | View the full history of all proposals (Draft, Published, Archived) | I have an audit trail |
+| US-PROP-07 | System | Skip conflicts during publish and log them | The whole batch never fails because of one conflict |
+| US-PROP-08 | System | Enforce tenant isolation on all proposal data | Each church only sees its own proposals |
+
+### 14.4 How the AI Agent Works
+
+The agent uses **Microsoft AI Agent Framework (`Microsoft.Extensions.AI`)** connected to the **GitHub Models API** (`https://models.inference.ai.azure.com`). The model name and access token are read from `appsettings` — never hardcoded.
+
+**Agent pattern:**
+1. A **system prompt** gives the agent all scheduling rules (skill requirements, fairness limits, day rules, monthly task rules)
+2. The agent calls **C# tool functions** (real database calls) to fetch tasks, members, and existing assignments
+3. The agent calls a **write tool function** to create each proposal item directly in the database
+4. When the agent stops calling tools, generation is complete
+
+**Agent tool functions:**
+
+| # | Tool | What it does |
+|---|------|-------------|
+| 1 | `GetRecurringTasksAsync` | Fetches all tasks with their day rules and skill requirements |
+| 2 | `GetQualifiedMembersAsync` | Returns members who have the skill required for a given task |
+| 3 | `GetMemberAssignmentCountAsync` | Returns how many tasks a member already has in a given month |
+| 4 | `GetExistingAssignmentsAsync` | Returns live assignments in the date range (for conflict awareness) |
+| 5 | `CreateProposalItemAsync` | Writes a proposed slot into the draft in the database |
+| 6 | `LogSkippedSlotAsync` | Records why the agent could not fill a slot (audit trail) |
+
+### 14.5 Async Generation Flow
+
+```
+Admin clicks "Generate"
+        │
+        ▼
+API creates RosterProposal (Status = Processing)
+Returns HTTP 202 + { proposalId } immediately
+        │
+        ▼
+Background job dequeues proposalId
+Runs AI agent loop (may take 10–60 seconds)
+        │
+        ▼
+On completion → Status = Draft
+        │
+        ▼
+Frontend polls GET /proposals/{id} every 3 s
+Spinner disappears → Edit view appears
+```
+
+> **Concurrency rule:** Only **one** proposal per church (tenant) may be in `Processing` status at a time. A second generate attempt returns `409 Conflict`.
+
+### 14.6 Proposal Lifecycle
+
+```
+[Processing] → [Draft] → [Published]
+                  ↓
+             [Archived]
+```
+
+| Status | Meaning |
+|--------|---------|
+| `Processing` | AI agent is running — read-only, no edits allowed |
+| `Draft` | Generation complete — Admin can add / edit / delete items |
+| `Published` | Pushed to live calendar — permanent history, no edits |
+| `Archived` | Manually archived by Admin — hidden from active view |
+
+### 14.7 Publish Rules
+
+When an Admin publishes a Draft:
+
+- For **each item** in the proposal:
+  - If a live `Assignment` already exists for the **same church + same task + same date** → item is marked `Skipped`, a skip log is written, processing **continues** (the whole publish never fails for one conflict)
+  - Otherwise → a new `Assignment` is created with `Status = Pending`, push/email notification sent to the member
+- The proposal's status is set to `Published`
+- Published proposals remain visible forever as history
+
+### 14.8 New Business Rules
+
+| Rule ID | Description |
+|---------|-------------|
+| **BR-10** | AI proposal generation is asynchronous — API returns 202 immediately, result polled by frontend |
+| **BR-11** | Model name and GitHub token are read from `appsettings` — never hardcoded in source code |
+| **BR-12** | Only one `Processing` proposal allowed per church at a time (409 on duplicate) |
+| **BR-13** | Published proposals are permanent history — never deleted |
+| **BR-14** | Publish skips (not fails) items that conflict with existing live assignments |
+| **BR-15** | Every skipped item during publish is recorded in a skip log for Admin review |
+| **BR-16** | All proposal data is tenant-isolated via EF Core Global Query Filter |
+| **BR-17** | Draft editing (add/edit/delete items) is only permitted when Status = `Draft` |
+
+### 14.9 New Data Entities
+
+```plaintext
+ROSTER_PROPOSALS
+├─ proposal_id        (PK, UUID)
+├─ tenant_id          (FK → TENANTS)
+├─ name               (e.g. "May 2026 Draft")
+├─ status             (Processing | Draft | Published | Archived)
+├─ date_range_start   (DATE)
+├─ date_range_end     (DATE)
+├─ generated_at       (TIMESTAMP)
+├─ published_at       (TIMESTAMP, nullable)
+├─ created_by_user_id (FK → USERS)
+
+ROSTER_PROPOSAL_ITEMS
+├─ item_id      (PK, UUID)
+├─ proposal_id  (FK → ROSTER_PROPOSALS, cascade delete)
+├─ task_id      (FK → TASKS)
+├─ user_id      (FK → USERS)
+├─ event_date   (DATE)
+├─ status       (Proposed | Skipped)
+├─ skip_reason  (TEXT, nullable)
+
+PROPOSAL_SKIP_LOGS
+├─ log_id       (PK, UUID)
+├─ proposal_id  (FK → ROSTER_PROPOSALS, cascade delete)
+├─ task_id      (INT)
+├─ event_date   (DATE)
+├─ reason       (TEXT)
+├─ logged_at    (TIMESTAMP)
+```
+
+### 14.10 New API Endpoints
+
+| Method | Route | Description | Auth |
+|--------|-------|-------------|------|
+| `POST` | `/api/v1/proposals` | Start async generation — returns 202 + proposalId | Admin |
+| `GET` | `/api/v1/proposals` | List all proposals (history) | Admin |
+| `GET` | `/api/v1/proposals/{id}` | Get proposal detail + items + skip logs | Admin |
+| `PATCH` | `/api/v1/proposals/{id}/items/{itemId}` | Edit an item (swap member) | Admin |
+| `POST` | `/api/v1/proposals/{id}/items` | Add a new item to draft | Admin |
+| `DELETE` | `/api/v1/proposals/{id}/items/{itemId}` | Remove an item from draft | Admin |
+| `POST` | `/api/v1/proposals/{id}/publish` | Publish draft to live calendar | Admin |
+| `POST` | `/api/v1/proposals/{id}/archive` | Archive a proposal | Admin |
+| `GET` | `/api/v1/proposals/{id}/pdf` | Download draft PDF with DRAFT watermark | Admin |
+
+### 14.11 New Frontend Pages
+
+| Route | Page | Purpose |
+|-------|------|---------|
+| `/proposals` | `ProposalsPage` | History list, status badges, Generate button |
+| `/proposals/generate` | `GenerateProposalPage` | Date range pickers + submit form |
+| `/proposals/:id` | `ProposalDetailPage` | View items, edit members, Publish / Archive / Print |
+
+**Async UX:** While `status === "Processing"`, the detail page shows a spinner with "Generating roster…". The page polls `GET /proposals/{id}` every 3 seconds and automatically transitions to the edit view when `status` becomes `"Draft"`.
+
+### 14.12 Dashboard Widget (Admin)
+
+A new widget on the Admin Dashboard shows:
+- Count of proposals currently in `Draft` or `Processing` state
+- Name and date of the most recently generated proposal
+- Quick link to `/proposals`
+
+---
+
+## 🔧 15. CONFIGURATION (AI Module)
+
+The AI module requires two values in server configuration. These must **never** be committed to source control.
+
+```json
+// appsettings.Development.json  (git-ignored)
+"GitHubModels": {
+  "Endpoint":  "https://models.inference.ai.azure.com",
+  "ModelName": "gpt-4o",
+  "Token":     "ghp_YOUR_GITHUB_PAT_HERE"
+}
+```
+
+```json
+// appsettings.json  (committed — safe placeholders only)
+"GitHubModels": {
+  "Endpoint":  "https://models.inference.ai.azure.com",
+  "ModelName": "",
+  "Token":     ""
+}
+```
+
+> On Render (production), set `GitHubModels__ModelName` and `GitHubModels__Token` as **environment variables**.
+
+---
+
+## ✅ 16. ACCEPTANCE CRITERIA (AI Module)
+
+| ID | Criterion |
+|----|-----------|
+| AC-01 | Admin can generate a proposal for any custom date range |
+| AC-02 | UI shows "Generating roster…" and auto-updates when generation completes |
+| AC-03 | Draft proposals are fully editable: add, edit, and delete items |
+| AC-04 | Publish skips and logs conflicts — the batch never fails for one conflict |
+| AC-05 | Published proposals remain in history permanently with status `Published` |
+| AC-06 | Draft PDF renders with a diagonal DRAFT watermark via QuestPDF |
+| AC-07 | All proposal data is tenant-isolated (EF Core Global Query Filter enforced) |
+| AC-08 | Model name and token come from `IConfiguration` — never hardcoded |
+| AC-09 | Only one `Processing` proposal per church at a time (returns 409 otherwise) |
+| AC-10 | Admin Dashboard widget shows draft/processing count + most recent proposal |
+
+---
+
+## 📋 17. UPDATED MUST-HAVE CHECKLIST (Release 1.1 — AI Module)
+
+### Backend
+- [ ] `RosterProposal`, `RosterProposalItem`, `ProposalSkipLog` entities created
+- [ ] EF Core Global Query Filter applied to `RosterProposal` (tenant-isolated)
+- [ ] DB migration applied to Supabase
+- [ ] 6 agent tool functions implemented and registered
+- [ ] `ProposalAgentService` running against GitHub Models
+- [ ] Async background job (`Channel<Guid>` + `BackgroundService`) confirmed working
+- [ ] All CQRS command and query handlers implemented
+- [ ] Publish logic: skip+log conflicts, create live Assignments, trigger notifications
+- [ ] Draft PDF with DRAFT watermark generated via QuestPDF
+- [ ] All 9 API endpoints require Admin role + X-Tenant-Id header
+
+### Frontend
+- [ ] `/proposals` history page with status badges
+- [ ] `/proposals/generate` page with date range pickers
+- [ ] `/proposals/:id` detail page with edit, publish, archive, print buttons
+- [ ] "Generating roster…" spinner with 3-second polling
+- [ ] Dashboard widget showing draft count + most recent proposal name
+- [ ] All API calls use `authToken` + `X-Tenant-Id` (consistent with existing pages)
+
+### System
+- [ ] `ModelName` and `Token` read from `IConfiguration` — not hardcoded anywhere
+- [ ] One-in-flight concurrency enforced per tenant (409 on duplicate generate)
+- [ ] Skip logs written for every conflict during publish
+- [ ] Published proposals never deleted from history

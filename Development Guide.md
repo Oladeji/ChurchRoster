@@ -208,7 +208,129 @@ church-roster-system/
 
 ---
 
-## 💻 4. GET STARTED: STEP-BY-STEP
+### **Week 7: AI-Powered Roster Proposal Module**
+*Added: April 2026 — Async agent-based generation using GitHub Models (free tier)*
+
+| Day | Task | Deliverable |
+|-----|------|-------------|
+| 1 | Domain entities + EF Core config | `RosterProposal`, `RosterProposalItem`, `ProposalSkipLog` classes |
+| 2 | DB migration + tool functions | Tables created, 6 agent tool methods implemented |
+| 3 | `ProposalAgentService` (Microsoft.Extensions.AI) | Agent loop running locally against GitHub Models |
+| 4 | Async background job (`Channel<Guid>` + `IHostedService`) | Non-blocking generation confirmed working |
+| 5 | All CQRS handlers (Commands + Queries) | Full backend business logic covered |
+| 6 | Publish logic (skip+log) + Draft PDF (DRAFT watermark) | End-to-end backend complete |
+| 7 | Frontend pages + Dashboard widget | Feature fully usable in browser |
+
+---
+
+#### Week 7 — Sequential Implementation Tasks
+
+**TASK 1 — Domain Entities** *(ChurchRoster.Core)*
+- Create `RosterProposal` entity with fields: `ProposalId`, `TenantId`, `Name`, `Status`, `DateRangeStart`, `DateRangeEnd`, `GeneratedAt`, `PublishedAt`, `CreatedByUserId`
+- Create `RosterProposalItem` entity: `ItemId`, `ProposalId`, `TaskId`, `UserId`, `EventDate`, `Status` (Proposed/Skipped), `SkipReason`
+- Create `ProposalSkipLog` entity: `LogId`, `ProposalId`, `TaskId`, `EventDate`, `Reason`, `LoggedAt`
+- Add `ProposalStatus` enum: `Draft | Processing | Published | Archived`
+- Add `ProposalItemStatus` enum: `Proposed | Skipped`
+- Add `GitHubModelsOptions` POCO (bound from config): `Endpoint`, `ModelName`, `Token`
+
+**TASK 2 — EF Core Configuration + DB Migration** *(ChurchRoster.Infrastructure)*
+- Add `DbSet<RosterProposal>`, `DbSet<RosterProposalItem>`, `DbSet<ProposalSkipLog>` to `AppDbContext`
+- Add EF Core **Global Query Filter** on `RosterProposal` → filter by `TenantId`
+- Configure cascade delete: Proposal → Items + SkipLogs
+- Auto-stamp `TenantId` on `RosterProposal` in `SaveChangesAsync`
+- Run migration: `dotnet ef migrations add AddProposalModule`
+- Apply to Supabase
+
+**TASK 3 — Agent Tool Functions** *(ChurchRoster.Infrastructure / Application)*
+- Install NuGet: `Microsoft.Extensions.AI.OpenAI`
+- Register `GitHubModelsOptions` via `services.Configure<GitHubModelsOptions>(config.GetSection("GitHubModels"))`
+- Implement 6 `[Description]`-annotated async tool methods:
+  1. `GetRecurringTasksAsync(Guid tenantId)`
+  2. `GetQualifiedMembersAsync(Guid tenantId, int taskId)`
+  3. `GetMemberAssignmentCountAsync(int userId, int month, int year)`
+  4. `GetExistingAssignmentsAsync(Guid tenantId, DateOnly start, DateOnly end)`
+  5. `CreateProposalItemAsync(Guid proposalId, int taskId, int userId, DateOnly date)`
+  6. `LogSkippedSlotAsync(Guid proposalId, int taskId, DateOnly date, string reason)`
+
+**TASK 4 — ProposalAgentService** *(ChurchRoster.Infrastructure)*
+- Build `IChatClient` using `AzureOpenAIClient` pointing at `GitHubModelsOptions.Endpoint` with the PAT token
+- Compose the system prompt with scheduling rules and tenant constraints
+- Register all 6 tool functions and run the agent loop until the model stops calling tools
+- Expose `GenerateAsync(Guid proposalId, Guid tenantId, DateOnly start, DateOnly end)` as the entry point
+
+**TASK 5 — Async Background Job** *(ChurchRoster.Infrastructure / Api)*
+- Create `Channel<Guid> proposalChannel` (singleton, bounded capacity = 10)
+- Create `ProposalGenerationJob : BackgroundService` that reads from the channel and calls `ProposalAgentService.GenerateAsync`
+- Register channel + job in `APIServiceCollection.cs`
+- `GenerateProposalCommand` handler: creates the `RosterProposal` (Status = Processing), writes to channel, returns `proposalId`
+- Enforce one-in-flight rule: return `409 Conflict` if tenant already has a Processing proposal
+
+**TASK 6 — Remaining CQRS Handlers** *(ChurchRoster.Application)*
+- `UpdateProposalItemCommand` handler — swap UserId on an item (Draft only)
+- `AddProposalItemCommand` handler — insert new item into draft
+- `DeleteProposalItemCommand` handler — remove item from draft
+- `PublishProposalCommand` handler — skip+log conflicts, create Assignments, update Status
+- `ArchiveProposalCommand` handler — set Status = Archived
+- `GetProposalByIdQuery` handler — return `ProposalDetailDto` (items + skip logs)
+- `GetProposalListQuery` handler — return `List<ProposalSummaryDto>`
+
+**TASK 7 — API Endpoints** *(ChurchRoster.Api)*
+- Add `ProposalEndpoints.cs` (minimal API style matching existing endpoint files)
+- Implement all 9 routes (POST generate, GET list, GET by id, PATCH item, POST item, DELETE item, POST publish, POST archive, GET pdf)
+- All require `[Authorize(Roles = "Admin")]` + tenant resolution via `TryResolveTenant`
+
+**TASK 8 — Draft PDF** *(ChurchRoster.Application / Infrastructure)*
+- Add `GenerateProposalDraftPdfAsync(Guid proposalId)` to report service
+- Reuse QuestPDF layout from `ReportService.GenerateMonthlyRosterAsync`
+- Add diagonal "DRAFT" text watermark on every page using QuestPDF `Canvas` layer
+- Expose via `GET /api/v1/proposals/{id}/pdf`
+
+**TASK 9 — Frontend Pages** *(frontend/src/pages)*
+- `ProposalsPage.tsx` — table of all proposals with status badges + Generate button
+- `GenerateProposalPage.tsx` — date range pickers + form submit (POST → store id → navigate to detail)
+- `ProposalDetailPage.tsx` — table view, member edit dropdowns, Publish / Archive / Print buttons
+- `ProposalStatusBadge.tsx` — reusable coloured badge component
+- `ProposalItemRow.tsx` — single editable row
+- Poll `GET /proposals/{id}` every 3 s while `status === "Processing"` → stop when `"Draft"`
+- All calls use `authToken` + `X-Tenant-Id` (same pattern as `ReportsPage.tsx`)
+
+**TASK 10 — Dashboard Widget** *(frontend/src/components)*
+- `ProposalDashboardWidget.tsx` — shows Draft/Processing count + most recent proposal name
+- Fetch from `GET /api/v1/proposals` (filter client-side or add `?summary=true` query param)
+- Add widget card to existing `AdminDashboard.tsx`
+
+---
+
+#### Week 7 — Configuration Reference
+
+```json
+// appsettings.Development.json  (git-ignored — local secrets only)
+"GitHubModels": {
+  "Endpoint":   "https://models.inference.ai.azure.com",
+  "ModelName":  "gpt-4o",
+  "Token":      "ghp_YOUR_GITHUB_PAT_HERE"
+}
+
+// appsettings.json  (committed — safe placeholders only)
+"GitHubModels": {
+  "Endpoint":   "https://models.inference.ai.azure.com",
+  "ModelName":  "",
+  "Token":      ""
+}
+```
+
+```csharp
+// Service registration (APIServiceCollection.cs)
+services.Configure<GitHubModelsOptions>(configuration.GetSection("GitHubModels"));
+services.AddSingleton(Channel.CreateBounded<Guid>(new BoundedChannelOptions(10)
+    { FullMode = BoundedChannelFullMode.Wait }));
+services.AddHostedService<ProposalGenerationJob>();
+services.AddScoped<ProposalAgentService>();
+```
+
+---
+
+
 
 ### **Step 1: Create Backend (.NET 10)**
 

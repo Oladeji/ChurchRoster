@@ -1,0 +1,291 @@
+AI-Powered Roster Proposal Module
+Functional Requirements Specification (Addendum v8.0)
+Updated: April 2026 — Reflects all confirmed design decisions from implementation planning.
+Save as: proposal_module_v8.md  or  Proposal_Module_Requirements_v8.txt
+
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+🎯 1. PURPOSE
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+Introduce an AI-Powered Proposal Module that allows Administrators to automatically
+generate draft rosters based on recurring tasks, member skills, availability, and
+fairness constraints.
+
+The AI agent uses Microsoft AI Agent Framework + GitHub Models (free tier), so there
+is ZERO cost during development. The model name and GitHub PAT token are read from
+appsettings — never hardcoded. Generation runs ASYNCHRONOUSLY so the UI is never
+blocked.
+
+This module integrates with the existing Clean Architecture and Multi-Tenancy design.
+Published proposals trigger the standard assignment workflow (Notifications,
+Accept/Reject). This module is ADMIN ONLY — members cannot access proposal pages.
+
+✅ Cost: GitHub Models free tier — zero cost for development and light production use.
+✅ No rule-based fallback strategy needed — agent-only approach via GitHub Models.
+
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+🤖 2. AI AGENT DESIGN (Confirmed)
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+Framework:     Microsoft.Extensions.AI (Microsoft AI Agent Framework)
+Model API:     GitHub Models — https://models.inference.ai.azure.com
+Auth:          GitHub Personal Access Token (PAT)
+Config source: appsettings.Development.json → "GitHubModels" section
+               (empty placeholders live in appsettings.json for production override)
+
+Config structure (appsettings.Development.json):
+  "GitHubModels": {
+    "Endpoint": "https://models.inference.ai.azure.com",
+    "ModelName": "gpt-4o",
+    "Token":     "ghp_YOUR_PAT_HERE"
+  }
+
+Agent pattern:
+  - Agent receives scheduling rules and constraints as a SYSTEM PROMPT
+    (e.g. "distribute tasks fairly, respect monthly limits, check skill requirements")
+  - Agent calls C# TOOL FUNCTIONS to fetch real data and write proposal items
+  - No rule-based fallback — GitHub Models free tier handles all generation
+
+Agent tool functions (C# async methods registered with the agent):
+  1. GetRecurringTasksAsync(tenantId)                          → task list + day rules
+  2. GetQualifiedMembersAsync(tenantId, taskId)                → members with required skill
+  3. GetMemberAssignmentCountAsync(userId, month, year)        → fairness data
+  4. GetExistingAssignmentsAsync(tenantId, startDate, endDate) → conflict awareness
+  5. CreateProposalItemAsync(proposalId, taskId, userId, date) → writes draft item to DB
+  6. LogSkippedSlotAsync(proposalId, taskId, date, reason)     → audit trail for gaps
+
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+👥 3. USER STORIES
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+ID           Role    Story
+-----------  ------  -------------------------------------------------------------
+US-PROP-01   Admin   Generate a roster proposal for a custom date range using AI
+US-PROP-02   Admin   See "Processing..." feedback while the proposal is generating
+US-PROP-03   Admin   Preview and edit a draft proposal (add / edit / delete items)
+US-PROP-04   Admin   Publish a proposal to the live calendar
+US-PROP-05   Admin   Print a proposal draft as PDF with DRAFT watermark
+US-PROP-06   Admin   View proposal history (all drafts, published, archived)
+US-PROP-07   System  Skip and log conflicts during publish (don't fail the batch)
+US-PROP-08   System  Enforce tenant isolation on all proposal data
+
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+🏛️ 4. ARCHITECTURE (Clean Architecture + CQRS)
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+4.1 DOMAIN LAYER — ChurchRoster.Core
+
+New Entities:
+
+  RosterProposal  (Aggregate Root)
+    ProposalId       : Guid
+    TenantId         : Guid
+    Name             : string          e.g. "May 2026 Draft"
+    Status           : ProposalStatus  { Draft, Processing, Published, Archived }
+    DateRangeStart   : DateOnly
+    DateRangeEnd     : DateOnly
+    GeneratedAt      : DateTime
+    PublishedAt      : DateTime?
+    CreatedByUserId  : int
+    Items            : List<RosterProposalItem>
+
+  RosterProposalItem
+    ItemId      : Guid
+    ProposalId  : Guid
+    TaskId      : int
+    UserId      : int
+    EventDate   : DateOnly
+    Status      : ProposalItemStatus  { Proposed, Skipped }
+    SkipReason  : string?             (set when marked Skipped on publish)
+
+  ProposalSkipLog
+    LogId       : Guid
+    ProposalId  : Guid
+    TaskId      : int
+    EventDate   : DateOnly
+    Reason      : string
+    LoggedAt    : DateTime
+
+New Enums:
+  ProposalStatus     { Draft, Processing, Published, Archived }
+  ProposalItemStatus { Proposed, Skipped }
+
+4.2 APPLICATION LAYER — ChurchRoster.Application
+
+Commands:
+  GenerateProposalCommand      (Name, DateRangeStart, DateRangeEnd, CreatedByUserId)
+  UpdateProposalItemCommand    (ItemId, NewUserId)
+  AddProposalItemCommand       (ProposalId, TaskId, UserId, EventDate)
+  DeleteProposalItemCommand    (ItemId)
+  PublishProposalCommand       (ProposalId)
+  ArchiveProposalCommand       (ProposalId)
+
+Queries:
+  GetProposalByIdQuery         → ProposalDetailDto
+  GetProposalListQuery         → List<ProposalSummaryDto>
+
+DTOs:
+  ProposalSummaryDto   { ProposalId, Name, Status, DateRangeStart, DateRangeEnd, GeneratedAt, ItemCount }
+  ProposalDetailDto    { ...summary, Items: List<ProposalItemDto>, SkipLogs: List<SkipLogDto> }
+  ProposalItemDto      { ItemId, TaskId, TaskName, UserId, MemberName, EventDate, Status }
+  SkipLogDto           { LogId, TaskId, EventDate, Reason, LoggedAt }
+
+Options POCO (bound from config):
+  GitHubModelsOptions  { Endpoint, ModelName, Token }
+
+4.3 INFRASTRUCTURE LAYER — ChurchRoster.Infrastructure
+
+  ProposalAgentService      — agent loop using Microsoft.Extensions.AI + tool registration
+  ProposalGenerationJob     — IHostedService + Channel<Guid> for async background processing
+  ProposalRepository        — EF Core, tenant-filtered via Global Query Filter
+  AppDbContext additions    — DbSet<RosterProposal>, DbSet<RosterProposalItem>, DbSet<ProposalSkipLog>
+
+4.4 API LAYER — ChurchRoster.Api
+
+  POST   /api/v1/proposals                         GenerateProposalCommand  (returns 202 + proposalId)
+  GET    /api/v1/proposals                         GetProposalListQuery
+  GET    /api/v1/proposals/{id}                    GetProposalByIdQuery
+  PATCH  /api/v1/proposals/{id}/items/{itemId}     UpdateProposalItemCommand
+  POST   /api/v1/proposals/{id}/items              AddProposalItemCommand
+  DELETE /api/v1/proposals/{id}/items/{itemId}     DeleteProposalItemCommand
+  POST   /api/v1/proposals/{id}/publish            PublishProposalCommand
+  POST   /api/v1/proposals/{id}/archive            ArchiveProposalCommand
+  GET    /api/v1/proposals/{id}/pdf                Draft PDF download
+
+  All endpoints: [Authorize(Roles = "Admin")] + X-Tenant-Id header required
+
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+📋 5. FEATURE SPECIFICATIONS
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+5.1  Generate Proposal (Async)
+  1. Admin POSTs /api/v1/proposals with { name, dateRangeStart, dateRangeEnd }
+  2. API creates RosterProposal with Status = Processing, returns HTTP 202 + { proposalId } immediately
+  3. ProposalId is queued on Channel<Guid> — no blocking of the HTTP thread
+  4. Background IHostedService dequeues and runs ProposalAgentService.GenerateAsync(...)
+       - System prompt encodes scheduling rules (fairness, skill checks, monthly limits)
+       - Agent loop calls tool functions to fetch data and write items
+  5. On completion: Status → Draft
+  6. Frontend polls GET /api/v1/proposals/{id} every 3 s, watches Status field
+     (shows "Processing…" spinner until status becomes "Draft")
+  7. Only ONE proposal per tenant may be in Processing status at a time
+     (enforced in GenerateProposalCommand handler — returns 409 if another is in-flight)
+
+5.2  Preview & Edit Proposal
+  - Admin views all items grouped by date
+  - Admin can:
+      Edit item   → change assigned member (PATCH item)
+      Add item    → pick task + member + date (POST item)
+      Delete item → remove a slot (DELETE item)
+  - All edits require Status = Draft (reject with 409 if Processing or Published)
+
+5.3  Publish Proposal
+  - Admin clicks Publish (requires Status = Draft)
+  - For each RosterProposalItem:
+      If a live Assignment already exists for same TenantId + TaskId + EventDate:
+          → mark item Skipped, write ProposalSkipLog, CONTINUE (never fail the batch)
+      Else:
+          → create Assignment (Status = Pending), trigger push/email notification
+  - Set RosterProposal.Status = Published
+  - Published proposals are permanent history (never deleted, visible in /proposals)
+
+5.4  Print Draft PDF
+  - Reuses QuestPDF pattern from existing ReportService
+  - Same layout as Monthly Roster PDF
+  - Large diagonal "DRAFT" watermark across every page
+  - Items grouped by date
+  - Available for both Draft and Published proposals
+
+5.5  Dashboard Widget
+  - Shows: count of Draft + Processing proposals
+  - Shows: most recent proposal name + generated date
+  - Quick-link to /proposals page
+
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+🗄️ 6. DATABASE SCHEMA
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+CREATE TABLE roster_proposals (
+    proposal_id         UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    tenant_id           UUID NOT NULL REFERENCES tenants(tenant_id),
+    name                VARCHAR(255) NOT NULL,
+    status              VARCHAR(50)  NOT NULL DEFAULT 'Processing',
+    date_range_start    DATE NOT NULL,
+    date_range_end      DATE NOT NULL,
+    generated_at        TIMESTAMP DEFAULT NOW(),
+    published_at        TIMESTAMP,
+    created_by_user_id  INTEGER NOT NULL
+);
+
+CREATE TABLE roster_proposal_items (
+    item_id      UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    proposal_id  UUID NOT NULL REFERENCES roster_proposals(proposal_id) ON DELETE CASCADE,
+    task_id      INTEGER NOT NULL REFERENCES tasks(task_id),
+    user_id      INTEGER NOT NULL REFERENCES users(user_id),
+    event_date   DATE NOT NULL,
+    status       VARCHAR(50) NOT NULL DEFAULT 'Proposed',
+    skip_reason  TEXT
+);
+
+CREATE TABLE proposal_skip_logs (
+    log_id       UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    proposal_id  UUID NOT NULL REFERENCES roster_proposals(proposal_id) ON DELETE CASCADE,
+    task_id      INTEGER NOT NULL,
+    event_date   DATE NOT NULL,
+    reason       TEXT NOT NULL,
+    logged_at    TIMESTAMP DEFAULT NOW()
+);
+
+CREATE INDEX idx_roster_proposals_tenant  ON roster_proposals(tenant_id);
+CREATE INDEX idx_proposal_items_proposal  ON roster_proposal_items(proposal_id);
+CREATE INDEX idx_skip_logs_proposal       ON proposal_skip_logs(proposal_id);
+
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+⚠️ 7. CONSTRAINTS & SECURITY
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+Cost          GitHub Models free tier — zero cost for development, low cost in production
+Privacy       Agent receives UserId (not names) — data anonymised before LLM call
+Isolation     EF Core Global Query Filter on RosterProposal filters by TenantId automatically
+Concurrency   One Processing proposal per tenant enforced in GenerateProposalCommand handler
+Roles         Admin only — 403 returned for Member role on all proposal endpoints
+Config        ModelName and Token MUST come from IConfiguration — never hardcoded
+
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+📱 8. FRONTEND PAGES (React + TypeScript)
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+Route                    Component                Notes
+-----------------------  -----------------------  -----------------------------------
+/proposals               ProposalsPage.tsx        History list, Generate button
+/proposals/generate      GenerateProposalPage.tsx Date range picker + submit
+/proposals/:id           ProposalDetailPage.tsx   Preview, Edit, Publish, Print, Archive
+
+Sub-components:
+  ProposalItemRow.tsx         — editable row (member dropdown, delete button)
+  ProposalStatusBadge.tsx     — Draft / Processing / Published / Archived badge
+  ProposalDashboardWidget.tsx — dashboard count + last proposal link
+
+Async UX:
+  - Poll GET /proposals/{id} every 3 s while status = "Processing"
+  - Show spinner with "Generating roster…" message
+  - Stop polling and show Edit view when status = "Draft"
+
+Auth pattern:
+  - Admin guard on all routes (same as other admin-only pages)
+  - All fetch calls: Authorization: Bearer {authToken}  +  X-Tenant-Id: {tenantId}
+
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+✅ 9. ACCEPTANCE CRITERIA
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+AC-01  Admin can generate a proposal for a custom date range via AI agent
+AC-02  UI shows "Generating roster…" spinner and auto-refreshes when draft is ready
+AC-03  Draft proposals are fully editable (add / edit / delete items)
+AC-04  Publish skips and logs conflicts instead of failing the whole batch
+AC-05  Published proposals remain visible in history with status = Published
+AC-06  Draft PDF renders with DRAFT watermark via QuestPDF
+AC-07  All proposal data is isolated by TenantId (Global Query Filter enforced)
+AC-08  ModelName and Token are read from IConfiguration — not hardcoded anywhere
+AC-09  Only one Processing proposal per tenant allowed at a time (409 on duplicate)
+AC-10  Dashboard widget shows draft/processing count and most recent proposal name
