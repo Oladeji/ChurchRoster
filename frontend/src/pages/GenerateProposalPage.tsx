@@ -59,7 +59,7 @@ const GenerateProposalPage: React.FC = () => {
             <div style={{ fontSize: '36px', marginBottom: '8px' }}>✨</div>
             <h1 style={{ fontSize: '22px', fontWeight: 'bold', color: 'white', margin: 0 }}>Generate Roster Proposal</h1>
             <p style={{ color: 'rgba(255,255,255,0.85)', marginTop: '6px', fontSize: '14px' }}>
-              The AI agent will build a draft roster for the selected date range, honouring member availability and fairness rules.
+              Generate a draft roster for the selected date range, honouring member availability and fairness rules.
             </p>
           </div>
 

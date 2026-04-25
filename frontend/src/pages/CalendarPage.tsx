@@ -14,6 +14,7 @@ const CalendarPage: React.FC = () => {
   const [refreshKey, setRefreshKey] = useState(0);
   const [exporting, setExporting] = useState(false);
   const [displayedMonth, setDisplayedMonth] = useState(new Date());
+  const [actionLoading, setActionLoading] = useState(false);
 
   const handleDateClick = (date: Date) => {
     setSelectedDate(date);
@@ -35,6 +36,39 @@ const CalendarPage: React.FC = () => {
   const handleDetailsClose = () => {
     setIsDetailsOpen(false);
     setSelectedAssignment(undefined);
+  };
+
+  const handleAcceptOnBehalf = async () => {
+    if (!selectedAssignment) return;
+    setActionLoading(true);
+    try {
+      const updated = await assignmentService.acceptAssignment(selectedAssignment.assignmentId);
+      setSelectedAssignment(updated);
+      setRefreshKey(prev => prev + 1);
+    } catch (error) {
+      console.error('Failed to accept assignment:', error);
+      alert('Failed to accept assignment. Please try again.');
+    } finally {
+      setActionLoading(false);
+    }
+  };
+
+  const handleCancelOnBehalf = async () => {
+    if (!selectedAssignment) return;
+    setActionLoading(true);
+    try {
+      const updated = await assignmentService.rejectAssignment(
+        selectedAssignment.assignmentId,
+        'Cancelled by admin on behalf of member'
+      );
+      setSelectedAssignment(updated);
+      setRefreshKey(prev => prev + 1);
+    } catch (error) {
+      console.error('Failed to cancel assignment:', error);
+      alert('Failed to cancel assignment. Please try again.');
+    } finally {
+      setActionLoading(false);
+    }
   };
 
   const handleModalSuccess = () => {
@@ -286,8 +320,28 @@ const CalendarPage: React.FC = () => {
                 </div>
               </div>
 
-              <div className="modal-actions" style={{ marginTop: '24px' }}>
-                <button onClick={handleDetailsClose} className="btn-primary">
+              <div className="modal-actions" style={{ marginTop: '24px', display: 'flex', gap: '10px', flexWrap: 'wrap' }}>
+                {selectedAssignment.status === 'Pending' && (
+                  <button
+                    onClick={handleAcceptOnBehalf}
+                    disabled={actionLoading}
+                    className="btn-primary"
+                    style={{ background: 'linear-gradient(135deg, #16A34A, #15803D)', boxShadow: '0 8px 20px rgba(22,163,74,0.25)', opacity: actionLoading ? 0.7 : 1 }}
+                  >
+                    {actionLoading ? '⏳ Processing...' : '✅ Accept on Behalf'}
+                  </button>
+                )}
+                {(selectedAssignment.status === 'Pending' || selectedAssignment.status === 'Accepted') && (
+                  <button
+                    onClick={handleCancelOnBehalf}
+                    disabled={actionLoading}
+                    className="btn-secondary"
+                    style={{ background: '#FEF2F2', color: '#991B1B', borderColor: '#FECACA', opacity: actionLoading ? 0.7 : 1 }}
+                  >
+                    {actionLoading ? '⏳ Processing...' : '❌ Cancel on Behalf'}
+                  </button>
+                )}
+                <button onClick={handleDetailsClose} className="btn-secondary" style={{ marginLeft: 'auto' }}>
                   Close
                 </button>
               </div>

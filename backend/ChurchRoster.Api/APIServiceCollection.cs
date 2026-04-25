@@ -6,10 +6,8 @@ using ChurchRoster.Core.Entities.Proposals;
 using ChurchRoster.Infrastructure.Data;
 using ChurchRoster.Infrastructure.Services.Proposals;
 using Microsoft.AspNetCore.Authentication.JwtBearer;
-using Microsoft.AspNetCore.Cors.Infrastructure;
 using Microsoft.AspNetCore.Http.Features;
 using Microsoft.EntityFrameworkCore;
-using Microsoft.Extensions.Options;
 using Microsoft.IdentityModel.Tokens;
 using System.Text;
 using System.Threading.Channels;
@@ -93,8 +91,12 @@ namespace ChurchRoster.Api
             services.AddHostedService<AssignmentReminderService>();
             services.AddHostedService<AssignmentStatusUpdateService>();
 
-            // AI Proposal Module
-            services.Configure<GitHubModelsOptions>(configuration.GetSection("GitHubModels"));
+            // Roster Proposal Generation — algorithm selected via RosterGeneration:Algorithm in appsettings
+            // Accepted values (case-insensitive): "Greedy" (default), "OrTools"
+            services.Configure<RosterOptions>(configuration.GetSection("RosterGeneration"));
+
+            var rosterAlgo = configuration.GetValue<string>("RosterGeneration:Algorithm") ?? "Greedy";
+            Console.WriteLine($"[Roster] Generation algorithm: {rosterAlgo}");
 
             // Bounded channel — capacity 10, writer blocks if full (prevents memory pressure)
             services.AddSingleton(Channel.CreateBounded<int>(new BoundedChannelOptions(10)
@@ -104,7 +106,8 @@ namespace ChurchRoster.Api
                 SingleWriter = false   // multiple HTTP requests may write
             }));
 
-            services.AddScoped<IProposalAgentTools, ProposalAgentTools>();
+            services.AddScoped<GreedyProposalService>();
+            services.AddScoped<OrToolsProposalService>();
             services.AddScoped<ProposalAgentService>();
             services.AddHostedService<ProposalGenerationJob>();
 

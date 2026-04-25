@@ -1,5 +1,4 @@
 using System.Threading.Channels;
-using ChurchRoster.Application.DTOs.Assignments;
 using ChurchRoster.Application.DTOs.Proposals;
 using ChurchRoster.Application.Interfaces;
 using ChurchRoster.Core.Entities;
@@ -15,7 +14,6 @@ public class ProposalService : IProposalService
     private readonly AppDbContext _db;
     private readonly ITenantContext _tenantContext;
     private readonly Channel<int> _channel;
-    private readonly IAssignmentService _assignmentService;
     private readonly INotificationService _notificationService;
     private readonly ILogger<ProposalService> _logger;
 
@@ -23,14 +21,12 @@ public class ProposalService : IProposalService
         AppDbContext db,
         ITenantContext tenantContext,
         Channel<int> channel,
-        IAssignmentService assignmentService,
         INotificationService notificationService,
         ILogger<ProposalService> logger)
     {
         _db = db;
         _tenantContext = tenantContext;
         _channel = channel;
-        _assignmentService = assignmentService;
         _notificationService = notificationService;
         _logger = logger;
     }
@@ -176,6 +172,16 @@ public class ProposalService : IProposalService
         var tenantId = _tenantContext.TenantId.Value;
         int created = 0;
         int skipped = 0;
+        var skippedDetails = new List<PublishSkippedItemDto>();
+
+        // Pre-load task and member names for skip detail messages
+        var taskNames = await _db.Tasks
+            .Where(t => proposal.Items.Select(i => i.TaskId).Contains(t.TaskId))
+            .ToDictionaryAsync(t => t.TaskId, t => t.TaskName);
+
+        var memberNames = await _db.Users
+            .Where(u => proposal.Items.Select(i => i.UserId).Contains(u.UserId))
+            .ToDictionaryAsync(u => u.UserId, u => u.Name);
 
         foreach (var item in proposal.Items.Where(i => i.Status == ProposalItemStatus.Proposed))
         {
@@ -192,17 +198,24 @@ public class ProposalService : IProposalService
 
             if (conflict)
             {
+                var reason = "Assignment already exists for this task and date";
                 item.Status = ProposalItemStatus.Skipped;
-                item.SkipReason = "Assignment already exists for this task and date";
+                item.SkipReason = reason;
 
                 _db.ProposalSkipLogs.Add(new ProposalSkipLog
                 {
                     ProposalId = proposalId,
                     TaskId = item.TaskId,
                     EventDate = item.EventDate,
-                    Reason = item.SkipReason,
+                    Reason = reason,
                     LoggedAt = DateTime.UtcNow
                 });
+
+                skippedDetails.Add(new PublishSkippedItemDto(
+                    taskNames.GetValueOrDefault(item.TaskId, $"Task #{item.TaskId}"),
+                    memberNames.GetValueOrDefault(item.UserId, $"Member #{item.UserId}"),
+                    item.EventDate,
+                    reason));
 
                 skipped++;
                 _logger.LogInformation(
@@ -210,29 +223,35 @@ public class ProposalService : IProposalService
                 continue;
             }
 
-            // Create live assignment
-            var assignmentResult = await _assignmentService.CreateAssignmentAsync(
-                new CreateAssignmentRequest(item.TaskId, item.UserId, eventDateUtc, false),
-                proposal.CreatedByUserId);
+            // Create the live assignment directly — validation rules (past date,
+            // same-day per-user, skill check) were enforced at generation time and
+            // reviewed by the admin before publish. Bypassing them here prevents
+            // legitimate items from being silently skipped because time has passed
+            // or the user already has a different task on the same day.
+            var assignment = new Assignment
+            {
+                TenantId   = tenantId,
+                TaskId     = item.TaskId,
+                UserId     = item.UserId,
+                EventDate  = eventDateUtc,
+                Status     = "Pending",
+                IsOverride = false,
+                AssignedBy = proposal.CreatedByUserId,
+                CreatedAt  = DateTime.UtcNow,
+                UpdatedAt  = DateTime.UtcNow,
+            };
+            _db.Assignments.Add(assignment);
+            await _db.SaveChangesAsync();
 
-            if (assignmentResult is not null)
+            try
             {
-                // Fire-and-forget notification — publish must not fail if push fails
-                _ = _notificationService.SendAssignmentNotificationAsync(assignmentResult.AssignmentId)
-                    .ContinueWith(t =>
-                        _logger.LogError(t.Exception, "Notification failed for AssignmentId={Id}", assignmentResult.AssignmentId),
-                        System.Threading.Tasks.TaskContinuationOptions.OnlyOnFaulted);
-                created++;
+                await _notificationService.SendAssignmentNotificationAsync(assignment.AssignmentId);
             }
-            else
+            catch (Exception ex)
             {
-                // Assignment creation failed (e.g. validation) — treat as skipped
-                item.Status = ProposalItemStatus.Skipped;
-                item.SkipReason = "Assignment creation failed — validation error";
-                skipped++;
-                _logger.LogWarning(
-                    "Publish: assignment creation failed for TaskId={TaskId} on {Date}", item.TaskId, item.EventDate);
+                _logger.LogError(ex, "Notification failed for AssignmentId={Id}", assignment.AssignmentId);
             }
+            created++;
         }
 
         proposal.Status = ProposalStatus.Published;
@@ -243,21 +262,52 @@ public class ProposalService : IProposalService
             "Proposal {ProposalId} published: {Created} assignments created, {Skipped} slots skipped",
             proposalId, created, skipped);
 
-        return new PublishProposalResult(proposalId, created, skipped);
+        return new PublishProposalResult(proposalId, created, skipped, skippedDetails);
     }
 
-    /// <summary>Archives a proposal (Draft or Published).</summary>
+    /// <summary>Archives a proposal (any status except already Archived).</summary>
     public async Task<bool> ArchiveProposalAsync(int proposalId)
     {
         var proposal = await _db.RosterProposals
             .FirstOrDefaultAsync(p => p.ProposalId == proposalId);
 
         if (proposal is null) return false;
-        if (proposal.Status == ProposalStatus.Processing) return false;
+        if (proposal.Status == ProposalStatus.Archived) return false;
 
         proposal.Status = ProposalStatus.Archived;
         await _db.SaveChangesAsync();
         return true;
+    }
+
+    /// <summary>
+    /// Archives the specified proposal (regardless of its current status) and
+    /// immediately re-queues a fresh generation covering the same date range.
+    /// Useful when a generation failed or got stuck in Processing.
+    /// Returns null if the proposal does not exist.
+    /// </summary>
+    public async Task<GenerateProposalResult?> RetryProposalAsync(int proposalId, int createdByUserId)
+    {
+        var existing = await _db.RosterProposals
+            .IgnoreQueryFilters()
+            .FirstOrDefaultAsync(p => p.ProposalId == proposalId);
+
+        if (existing is null)
+        {
+            _logger.LogWarning("RetryProposal: ProposalId={ProposalId} not found", proposalId);
+            return null;
+        }
+
+        // Archive the stuck/failed proposal so the one-in-flight guard does not block us
+        existing.Status = ProposalStatus.Archived;
+        await _db.SaveChangesAsync();
+
+        _logger.LogInformation(
+            "RetryProposal: ProposalId={ProposalId} archived — re-queuing with same range {Start} to {End}",
+            proposalId, existing.DateRangeStart, existing.DateRangeEnd);
+
+        return await GenerateProposalAsync(
+            new GenerateProposalRequest(existing.Name, existing.DateRangeStart, existing.DateRangeEnd),
+            createdByUserId);
     }
 
     // ── Queries ──────────────────────────────────────────────────────────────
@@ -270,6 +320,7 @@ public class ProposalService : IProposalService
             .Include(p => p.Items)
                 .ThenInclude(i => i.User)
             .Include(p => p.SkipLogs)
+                .ThenInclude(l => l.Task)
             .FirstOrDefaultAsync(p => p.ProposalId == proposalId);
 
         if (proposal is null) return null;
@@ -312,5 +363,5 @@ public class ProposalService : IProposalService
             item.EventDate, item.Status.ToString(), item.SkipReason);
 
     private static SkipLogDto MapSkipLogToDto(ProposalSkipLog log) =>
-        new(log.LogId, log.TaskId, log.EventDate, log.Reason, log.LoggedAt);
+        new(log.LogId, log.TaskId, log.Task.TaskName, log.EventDate, log.Reason, log.LoggedAt);
 }

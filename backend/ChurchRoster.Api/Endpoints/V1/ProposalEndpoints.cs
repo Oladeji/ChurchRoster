@@ -66,6 +66,11 @@ public static class ProposalEndpoints
             .Produces(StatusCodes.Status404NotFound)
             .Produces(StatusCodes.Status409Conflict);
 
+        group.MapPost("/{id:int}/retry", RetryProposal)
+            .WithName("RetryProposal")
+            .Produces<GenerateProposalResult>(StatusCodes.Status202Accepted)
+            .Produces(StatusCodes.Status404NotFound);
+
         group.MapGet("/{id:int}/pdf", GetProposalDraftPdf)
             .WithName("GetProposalDraftPdf")
             .Produces(StatusCodes.Status200OK, contentType: "application/pdf")
@@ -279,6 +284,30 @@ public static class ProposalEndpoints
         {
             return Results.Problem($"Failed to generate draft PDF: {ex.Message}");
         }
+    }
+
+    private static async Task<IResult> RetryProposal(
+        int id,
+        HttpContext httpContext,
+        ITenantContext tenantContext,
+        IProposalService proposalService)
+    {
+        if (!TryResolveTenant(httpContext, tenantContext))
+            return Results.BadRequest(new { message = "Tenant context is required." });
+
+        if (!IsAdmin(httpContext))
+            return Results.Forbid();
+
+        var userId = GetUserId(httpContext);
+        if (userId is null)
+            return Results.BadRequest(new { message = "Could not resolve user identity." });
+
+        var result = await proposalService.RetryProposalAsync(id, userId.Value);
+
+        if (result is null)
+            return Results.NotFound(new { message = "Proposal not found." });
+
+        return Results.Accepted($"/api/v1/proposals/{result.ProposalId}", result);
     }
 
     // ── Shared helpers (same pattern as ReportEndpoints) ─────────────────────

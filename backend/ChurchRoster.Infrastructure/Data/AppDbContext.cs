@@ -333,6 +333,11 @@ public class AppDbContext : DbContext
             entity.Property(e => e.LoggedAt).HasColumnName("logged_at").HasDefaultValueSql("NOW()");
 
             entity.HasIndex(e => e.ProposalId).HasDatabaseName("idx_skip_logs_proposal");
+
+            entity.HasOne(e => e.Task)
+                .WithMany()
+                .HasForeignKey(e => e.TaskId)
+                .OnDelete(DeleteBehavior.Restrict);
         });
 
         // Seed initial data

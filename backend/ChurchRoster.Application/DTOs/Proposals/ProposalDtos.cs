@@ -45,6 +45,7 @@ public record ProposalItemDto(
 public record SkipLogDto(
     int LogId,
     int TaskId,
+    string TaskName,
     DateOnly EventDate,
     string Reason,
     DateTime LoggedAt
@@ -67,8 +68,16 @@ public record GenerateProposalResult(
     string Status
 );
 
+public record PublishSkippedItemDto(
+    string TaskName,
+    string MemberName,
+    DateOnly EventDate,
+    string Reason
+);
+
 public record PublishProposalResult(
     int ProposalId,
     int AssignmentsCreated,
-    int SlotsSkipped
+    int SlotsSkipped,
+    IReadOnlyList<PublishSkippedItemDto> Skipped
 );

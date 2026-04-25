@@ -6,6 +6,7 @@ public interface IProposalService
 {
     // Commands
     Task<GenerateProposalResult?> GenerateProposalAsync(GenerateProposalRequest request, int createdByUserId);
+    Task<GenerateProposalResult?> RetryProposalAsync(int proposalId, int createdByUserId);
     Task<ProposalItemDto?> UpdateProposalItemAsync(int itemId, UpdateProposalItemRequest request);
     Task<ProposalItemDto?> AddProposalItemAsync(int proposalId, AddProposalItemRequest request);
     Task<bool> DeleteProposalItemAsync(int itemId);

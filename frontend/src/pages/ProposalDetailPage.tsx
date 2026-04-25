@@ -4,7 +4,7 @@ import proposalService from '../services/proposal.service';
 import memberService from '../services/member.service';
 import ProposalStatusBadge from '../components/ProposalStatusBadge';
 import ProposalItemRow from '../components/ProposalItemRow';
-import type { ProposalDetail, User } from '../types';
+import type { ProposalDetail, User, PublishResult } from '../types';
 
 const POLL_INTERVAL_MS = 3000;
 
@@ -18,6 +18,7 @@ const ProposalDetailPage: React.FC = () => {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
   const [actionLoading, setActionLoading] = useState<string | null>(null);
+  const [publishResult, setPublishResult] = useState<PublishResult | null>(null);
   const [showAddForm, setShowAddForm] = useState(false);
   const [addTaskId, setAddTaskId] = useState('');
   const [addUserId, setAddUserId] = useState('');
@@ -97,7 +98,8 @@ const ProposalDetailPage: React.FC = () => {
     if (!window.confirm('Publish this proposal? All items will be converted to Assignments and notifications will be sent to assigned members.')) return;
     try {
       setActionLoading('publish');
-      await proposalService.publish(proposal.proposalId);
+      const result = await proposalService.publish(proposal.proposalId);
+      setPublishResult(result);
       await fetchProposal(true);
     } catch {
       alert('Failed to publish proposal. Please try again.');
@@ -263,6 +265,41 @@ const ProposalDetailPage: React.FC = () => {
               </div>
             </div>
           )}
+
+          {/* Publish result banner */}
+          {publishResult && (
+            <div style={{ marginTop: '16px', background: publishResult.slotsSkipped > 0 ? '#FFFBEB' : '#F0FDF4', border: `1px solid ${publishResult.slotsSkipped > 0 ? '#FCD34D' : '#86EFAC'}`, borderRadius: '10px', padding: '14px 18px' }}>
+              <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: publishResult.slotsSkipped > 0 ? '10px' : 0 }}>
+                <p style={{ margin: 0, fontWeight: 700, fontSize: '14px', color: publishResult.slotsSkipped > 0 ? '#92400E' : '#166534' }}>
+                  ✅ Published — {publishResult.assignmentsCreated} assignment{publishResult.assignmentsCreated !== 1 ? 's' : ''} created
+                  {publishResult.slotsSkipped > 0 && `, ${publishResult.slotsSkipped} slot${publishResult.slotsSkipped !== 1 ? 's' : ''} skipped`}
+                </p>
+                <button onClick={() => setPublishResult(null)} style={{ background: 'none', border: 'none', cursor: 'pointer', fontSize: '16px', color: '#6B7280', lineHeight: 1 }}>✕</button>
+              </div>
+              {publishResult.skipped.length > 0 && (
+                <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: '13px' }}>
+                  <thead>
+                    <tr style={{ borderBottom: '1px solid #FCD34D' }}>
+                      <th style={{ textAlign: 'left', padding: '4px 8px', color: '#92400E', fontWeight: 700, fontSize: '11px', textTransform: 'uppercase' }}>Task</th>
+                      <th style={{ textAlign: 'left', padding: '4px 8px', color: '#92400E', fontWeight: 700, fontSize: '11px', textTransform: 'uppercase' }}>Member</th>
+                      <th style={{ textAlign: 'left', padding: '4px 8px', color: '#92400E', fontWeight: 700, fontSize: '11px', textTransform: 'uppercase' }}>Date</th>
+                      <th style={{ textAlign: 'left', padding: '4px 8px', color: '#92400E', fontWeight: 700, fontSize: '11px', textTransform: 'uppercase' }}>Reason</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {publishResult.skipped.map((s, i) => (
+                      <tr key={i} style={{ borderBottom: '1px solid #FEF3C7' }}>
+                        <td style={{ padding: '5px 8px', color: '#374151' }}>{s.taskName}</td>
+                        <td style={{ padding: '5px 8px', color: '#374151' }}>{s.memberName}</td>
+                        <td style={{ padding: '5px 8px', color: '#374151' }}>{new Date(s.eventDate + 'T00:00:00').toLocaleDateString('en-GB', { day: 'numeric', month: 'short', year: 'numeric' })}</td>
+                        <td style={{ padding: '5px 8px', color: '#B45309', fontStyle: 'italic' }}>{s.reason}</td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              )}
+            </div>
+          )}
         </div>
 
         {/* Summary stats */}
@@ -377,6 +414,7 @@ const ProposalDetailPage: React.FC = () => {
               <thead>
                 <tr style={{ background: '#FEF2F2' }}>
                   <th style={{ padding: '8px 16px', textAlign: 'left', fontSize: '11px', fontWeight: 700, color: '#9CA3AF', textTransform: 'uppercase' }}>Date</th>
+                  <th style={{ padding: '8px 16px', textAlign: 'left', fontSize: '11px', fontWeight: 700, color: '#9CA3AF', textTransform: 'uppercase' }}>Task</th>
                   <th style={{ padding: '8px 16px', textAlign: 'left', fontSize: '11px', fontWeight: 700, color: '#9CA3AF', textTransform: 'uppercase' }}>Reason</th>
                   <th style={{ padding: '8px 16px', textAlign: 'left', fontSize: '11px', fontWeight: 700, color: '#9CA3AF', textTransform: 'uppercase' }}>Logged At</th>
                 </tr>
@@ -385,8 +423,10 @@ const ProposalDetailPage: React.FC = () => {
                 {proposal.skipLogs.map((log) => (
                   <tr key={log.logId} style={{ borderBottom: '1px solid #F3F4F6' }}>
                     <td style={{ padding: '10px 16px', fontSize: '13px', color: '#374151' }}>
-                      {formatDate(log.eventDate)}
+                     
+                      {new Date(log.eventDate + 'T00:00:00').toLocaleDateString('en-GB', { weekday: 'long', day: 'numeric', month: 'long', year: 'numeric' })}
                     </td>
+                    <td style={{ padding: '10px 16px', fontSize: '13px', color: '#374151', fontWeight: 500 }}>{log.taskName}</td>
                     <td style={{ padding: '10px 16px', fontSize: '13px', color: '#991B1B' }}>{log.reason}</td>
                     <td style={{ padding: '10px 16px', fontSize: '12px', color: '#9CA3AF' }}>
                       {new Date(log.loggedAt).toLocaleString('en-GB', { day: 'numeric', month: 'short', hour: '2-digit', minute: '2-digit' })}

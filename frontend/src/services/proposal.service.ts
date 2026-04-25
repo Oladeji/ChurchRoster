@@ -5,6 +5,7 @@ import type {
   GenerateProposalRequest,
   UpdateProposalItemRequest,
   AddProposalItemRequest,
+  PublishResult,
 } from '../types';
 
 const BASE = '/v1/proposals';
@@ -34,8 +35,8 @@ const proposalService = {
     return apiService.delete<void>(`${BASE}/${proposalId}/items/${itemId}`);
   },
 
-  publish(proposalId: number): Promise<void> {
-    return apiService.post<void>(`${BASE}/${proposalId}/publish`);
+  publish(proposalId: number): Promise<PublishResult> {
+    return apiService.post<PublishResult>(`${BASE}/${proposalId}/publish`);
   },
 
   archive(proposalId: number): Promise<void> {

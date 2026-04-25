@@ -1,6 +1,8 @@
+import React from 'react';
 import { BrowserRouter as Router, Routes, Route, Navigate } from 'react-router-dom';
 import { AuthProvider } from './context/AuthContext';
 import ProtectedRoute from './components/ProtectedRoute';
+import { useNotifications } from './hooks/useNotifications';
 import Login from './pages/Login';
 import Register from './pages/Register';
 import Dashboard from './pages/Dashboard';
@@ -21,6 +23,7 @@ import './App.css';
 function App() {
   return (
     <AuthProvider>
+      <NotificationProvider>
       <Router>
         <Routes>
           <Route path="/login" element={<Login />} />
@@ -135,8 +138,16 @@ function App() {
           <Route path="*" element={<Navigate to="/dashboard" replace />} />
         </Routes>
       </Router>
+      </NotificationProvider>
     </AuthProvider>
   );
 }
 export default App;
+
+
+// Mounts the notification listener for the entire app session (outside page routing)
+function NotificationProvider({ children }: { children: React.ReactNode }) {
+  useNotifications();
+  return <>{children}</>;
+}
 

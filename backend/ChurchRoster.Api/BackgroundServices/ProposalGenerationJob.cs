@@ -34,11 +34,12 @@ public class ProposalGenerationJob : BackgroundService
 
         await foreach (var proposalId in _channel.Reader.ReadAllAsync(stoppingToken))
         {
-            _logger.LogInformation("ProposalGenerationJob dequeued ProposalId={ProposalId}", proposalId);
+            _logger.LogInformation("ProposalGenerationJob dequeued ProposalId={ProposalId} — starting generation", proposalId);
 
             try
             {
                 await RunGenerationAsync(proposalId, stoppingToken);
+                _logger.LogInformation("ProposalGenerationJob completed ProposalId={ProposalId}", proposalId);
             }
             catch (OperationCanceledException) when (stoppingToken.IsCancellationRequested)
             {
@@ -47,8 +48,10 @@ public class ProposalGenerationJob : BackgroundService
             }
             catch (Exception ex)
             {
-                // Log but do NOT crash the job — continue processing the next item
-                _logger.LogError(ex, "ProposalGenerationJob failed for ProposalId={ProposalId}", proposalId);
+                // Log full exception so it is visible in the debug output window
+                _logger.LogError(ex,
+                    "ProposalGenerationJob FAILED for ProposalId={ProposalId} — {ExType}: {ExMsg}",
+                    proposalId, ex.GetType().Name, ex.Message);
             }
         }
 

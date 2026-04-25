@@ -6,6 +6,7 @@
     <!-- Entity Framework Core -->
     <PackageVersion Include="Asp.Versioning.Mvc" Version="10.0.0-preview.2" />
     <PackageVersion Include="Asp.Versioning.Mvc.ApiExplorer" Version="10.0.0-preview.2" />
+    <PackageVersion Include="Google.OrTools" Version="9.15.6755" />
     <PackageVersion Include="Microsoft.AspNetCore.Cors" Version="2.3.9" />
     <PackageVersion Include="Microsoft.Extensions.Configuration" Version="10.0.5" />
     <PackageVersion Include="Microsoft.Extensions.Configuration.Json" Version="10.0.1" />
@@ -15,6 +16,7 @@
     <PackageVersion Include="Microsoft.EntityFrameworkCore.Tools" Version="10.0.0" />
     <!-- Authentication & Security -->
     <PackageVersion Include="Microsoft.AspNetCore.Authentication.JwtBearer" Version="10.0.0" />
+    <PackageVersion Include="OllamaSharp" Version="5.4.25" />
     <PackageVersion Include="QuestPDF" Version="2024.12.3" />
     <PackageVersion Include="Scalar.AspNetCore" Version="2.13.18" />
     <PackageVersion Include="System.IdentityModel.Tokens.Jwt" Version="8.5.0" />

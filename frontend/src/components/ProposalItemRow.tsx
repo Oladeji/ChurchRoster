@@ -16,9 +16,10 @@ const STATUS_STYLE: Record<string, { bg: string; color: string }> = {
 
 const ProposalItemRow: React.FC<Props> = ({ item, members, editable, onMemberChange, onDelete }) => {
   const style = STATUS_STYLE[item.status] ?? { bg: '#F3F4F6', color: '#374151' };
-  const eventDate = new Date(item.eventDate);
+  const eventDate = new Date(item.eventDate+ 'T00:00:00');
   const dateLabel = eventDate.toLocaleDateString('en-GB', { weekday: 'short', day: 'numeric', month: 'short', year: 'numeric' });
-
+//     {new Date(dateKey + 'T00:00:00').toLocaleDateString('en-GB', { weekday: 'long', day: 'numeric', month: 'long', year: 'numeric' })}
+            
   return (
     <tr style={{ borderBottom: '1px solid #E5E7EB' }}>
       <td style={{ padding: '10px 12px', fontSize: '14px', whiteSpace: 'nowrap' }}>{dateLabel}</td>

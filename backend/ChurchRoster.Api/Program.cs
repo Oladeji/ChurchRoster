@@ -3,6 +3,7 @@ using ChurchRoster.Api;
 using ChurchRoster.Api.Middleware;
 using Microsoft.AspNetCore.Cors.Infrastructure;
 using Microsoft.AspNetCore.HttpOverrides;
+using Microsoft.EntityFrameworkCore;
 using Scalar.AspNetCore;
 
 var builder = WebApplication.CreateBuilder(args);
@@ -19,9 +20,11 @@ builder.Logging.AddFilter("Microsoft.EntityFrameworkCore.Infrastructure", LogLev
 builder.Logging.AddFilter("ChurchRoster", LogLevel.Debug);
 
 // Add PORT support for Render
-var port = Environment.GetEnvironmentVariable("PORT") ?? "7288";
-builder.WebHost.UseUrls($"http://0.0.0.0:{port}");
-
+if (!builder.Environment.IsDevelopment())
+{
+    var port = Environment.GetEnvironmentVariable("PORT") ?? "7288";
+    builder.WebHost.UseUrls($"http://0.0.0.0:{port}");
+}
 // Log startup configuration
 var logger = LoggerFactory.Create(config => config.AddConsole()).CreateLogger("Startup");
 logger.LogInformation("=== Church Roster API Starting ===");
@@ -50,6 +53,26 @@ builder.Services.Configure<ForwardedHeadersOptions>(options =>
 });
 
 var app = builder.Build();
+
+// Reset any proposals that were left in Processing status from a previous run
+// (e.g. the app was killed mid-generation). Must happen before the background job starts.
+using (var startupScope = app.Services.CreateScope())
+{
+    var db = startupScope.ServiceProvider.GetRequiredService<ChurchRoster.Infrastructure.Data.AppDbContext>();
+    var startupLogger = startupScope.ServiceProvider.GetRequiredService<ILogger<Program>>();
+    var orphans = await db.RosterProposals
+        .IgnoreQueryFilters()
+        .Where(p => p.Status == ChurchRoster.Core.Entities.Proposals.ProposalStatus.Processing)
+        .ToListAsync();
+    if (orphans.Count > 0)
+    {
+        foreach (var orphan in orphans)
+            orphan.Status = ChurchRoster.Core.Entities.Proposals.ProposalStatus.Archived;
+        await db.SaveChangesAsync();
+        startupLogger.LogWarning(
+            "Startup: reset {Count} orphaned Processing proposal(s) to Archived", orphans.Count);
+    }
+}
 
 // Add global exception handler
 app.Use(async (context, next) =>

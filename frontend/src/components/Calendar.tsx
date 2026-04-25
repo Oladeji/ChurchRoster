@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import assignmentService from '../services/assignment.service';
 import type { Assignment } from '../types';
 
@@ -14,20 +14,22 @@ const Calendar: React.FC<CalendarProps> = ({ onDateClick, onAssignmentClick, use
   const [currentDate, setCurrentDate] = useState(currentMonth ?? new Date());
   const [assignments, setAssignments] = useState<Assignment[]>([]);
   const [loading, setLoading] = useState(true);
+  const prevCurrentMonthRef = useRef<Date | undefined>(currentMonth);
 
+  // Sync external currentMonth prop into internal state only when the
+  // parent actually navigates to a different month (avoids infinite loop
+  // from new Date object references on every parent render).
   useEffect(() => {
+    const prev = prevCurrentMonthRef.current;
+    prevCurrentMonthRef.current = currentMonth;
     if (
       currentMonth &&
-      (currentMonth.getFullYear() !== currentDate.getFullYear() ||
-        currentMonth.getMonth() !== currentDate.getMonth())
+      (currentMonth.getFullYear() !== (prev?.getFullYear() ?? -1) ||
+        currentMonth.getMonth() !== (prev?.getMonth() ?? -1))
     ) {
-      setCurrentDate(currentMonth);
+      setCurrentDate(new Date(currentMonth.getFullYear(), currentMonth.getMonth(), 1));
     }
-  }, [currentMonth, currentDate]);
-
-  useEffect(() => {
-    onMonthChange?.(currentDate);
-  }, [currentDate, onMonthChange]);
+  }, [currentMonth]);
 
   useEffect(() => {
     loadAssignments();
@@ -84,15 +86,21 @@ const Calendar: React.FC<CalendarProps> = ({ onDateClick, onAssignmentClick, use
   };
 
   const previousMonth = () => {
-    setCurrentDate(new Date(currentDate.getFullYear(), currentDate.getMonth() - 1, 1));
+    const newDate = new Date(currentDate.getFullYear(), currentDate.getMonth() - 1, 1);
+    setCurrentDate(newDate);
+    onMonthChange?.(newDate);
   };
 
   const nextMonth = () => {
-    setCurrentDate(new Date(currentDate.getFullYear(), currentDate.getMonth() + 1, 1));
+    const newDate = new Date(currentDate.getFullYear(), currentDate.getMonth() + 1, 1);
+    setCurrentDate(newDate);
+    onMonthChange?.(newDate);
   };
 
   const goToToday = () => {
-    setCurrentDate(new Date());
+    const newDate = new Date();
+    setCurrentDate(newDate);
+    onMonthChange?.(newDate);
   };
 
   const isToday = (date: Date | null): boolean => {

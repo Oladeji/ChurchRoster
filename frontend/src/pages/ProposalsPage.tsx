@@ -47,7 +47,7 @@ const ProposalsPage: React.FC = () => {
               🤖 Roster Proposals
             </h1>
             <p style={{ color: '#6B7280', marginTop: '4px', fontSize: '15px' }}>
-              AI-generated draft rosters — review, edit and publish
+              Generated draft rosters — review, edit and publish
             </p>
           </div>
           <button

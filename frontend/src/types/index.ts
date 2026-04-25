@@ -148,6 +148,7 @@ export interface ProposalItem {
 export interface SkipLog {
   logId: number;
   taskId: number;
+  taskName: string;
   eventDate: string;
   reason: string;
   loggedAt: string;
@@ -179,6 +180,20 @@ export interface AddProposalItemRequest {
   taskId: number;
   userId: number;
   eventDate: string;
+}
+
+export interface PublishSkippedItem {
+  taskName: string;
+  memberName: string;
+  eventDate: string;
+  reason: string;
+}
+
+export interface PublishResult {
+  proposalId: number;
+  assignmentsCreated: number;
+  slotsSkipped: number;
+  skipped: PublishSkippedItem[];
 }
 
 // Filter Types

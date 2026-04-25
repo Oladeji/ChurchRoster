@@ -534,6 +534,7 @@ public class ReportService : IReportService
                 .Include(p => p.Items)
                     .ThenInclude(i => i.User)
                 .Include(p => p.SkipLogs)
+                    .ThenInclude(l => l.Task)
                 .FirstOrDefaultAsync(p => p.ProposalId == proposalId);
 
             if (proposal == null)
@@ -563,7 +564,7 @@ public class ReportService : IReportService
                         .Text("DRAFT")
                         .FontSize(120)
                         .Bold()
-                        .FontColor("#55FF000020");
+                        .FontColor("#20FF0000");
 
                     page.Header()
                         .PaddingBottom(10)
@@ -678,6 +679,7 @@ public class ReportService : IReportService
                                                 table.ColumnsDefinition(columns =>
                                                 {
                                                     columns.ConstantColumn(90);  // Date
+                                                    columns.RelativeColumn(2);   // Task
                                                     columns.RelativeColumn(3);   // Reason
                                                     columns.ConstantColumn(70);  // Logged
                                                 });
@@ -685,6 +687,7 @@ public class ReportService : IReportService
                                                 table.Header(header =>
                                                 {
                                                     header.Cell().Background(Colors.Grey.Lighten2).Padding(5).Text("Date").SemiBold();
+                                                    header.Cell().Background(Colors.Grey.Lighten2).Padding(5).Text("Task").SemiBold();
                                                     header.Cell().Background(Colors.Grey.Lighten2).Padding(5).Text("Reason").SemiBold();
                                                     header.Cell().Background(Colors.Grey.Lighten2).Padding(5).Text("Logged At").SemiBold();
                                                 });
@@ -693,6 +696,8 @@ public class ReportService : IReportService
                                                 {
                                                     table.Cell().BorderBottom(0.5f).BorderColor(Colors.Grey.Lighten2).Padding(5)
                                                         .Text(log.EventDate.ToString("MMM dd, yyyy"));
+                                                    table.Cell().BorderBottom(0.5f).BorderColor(Colors.Grey.Lighten2).Padding(5)
+                                                        .Text(log.Task.TaskName);
                                                     table.Cell().BorderBottom(0.5f).BorderColor(Colors.Grey.Lighten2).Padding(5)
                                                         .Text(log.Reason)
                                                         .FontColor(Colors.Red.Darken2);

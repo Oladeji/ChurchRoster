@@ -11,4 +11,5 @@ public class ProposalSkipLog
 
     // Navigation properties
     public RosterProposal Proposal { get; set; } = null!;
+    public MinistryTask Task { get; set; } = null!;
 }
