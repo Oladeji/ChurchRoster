@@ -2,24 +2,40 @@
 <html lang="en">
   <head>
     <meta charset="UTF-8" />
-    <link rel="icon" type="image/svg+xml" href="/favicon.svg" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <title>Church Ministry Roster</title>
+
+    <!-- PWA manifest -->
+    <link rel="manifest" href="/manifest.json" />
+
+    <!-- Standard favicon -->
+    <link rel="icon" type="image/svg+xml" href="/favicon.svg" />
+
+    <!-- iOS PWA — must have these for "Add to Home Screen" to behave as a full-screen app -->
+    <meta name="apple-mobile-web-app-capable" content="yes" />
+    <meta name="apple-mobile-web-app-status-bar-style" content="default" />
+    <meta name="apple-mobile-web-app-title" content="ChurchRoster" />
+    <link rel="apple-touch-icon" href="/apple-touch-icon-180x180.png" />
+
+    <!-- Theme colour (Android address bar) -->
+    <meta name="theme-color" content="#4F46E5" />
   </head>
   <body>
     <div id="root"></div>
     <script type="module" src="/src/main.tsx"></script>
 
-    <!-- Register Firebase Messaging Service Worker -->
+    <!-- Register Firebase Messaging Service Worker (push notifications) -->
     <script>
       if ('serviceWorker' in navigator) {
+        // Firebase SW — handles push notifications
         navigator.serviceWorker.register('/firebase-messaging-sw.js')
-          .then((registration) => {
-            console.log('Service Worker registered:', registration);
-          })
-          .catch((error) => {
-            console.error('Service Worker registration failed:', error);
-          });
+          .then((r) => console.log('Firebase SW registered:', r.scope))
+          .catch((e) => console.error('Firebase SW registration failed:', e));
+
+        // Workbox SW — handles offline / app-shell caching (PWA install)
+        navigator.serviceWorker.register('/sw.js')
+          .then((r) => console.log('Workbox SW registered:', r.scope))
+          .catch((e) => console.error('Workbox SW registration failed:', e));
       }
     </script>
   </body>

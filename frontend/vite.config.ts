@@ -1,6 +1,7 @@
 import { defineConfig } from 'vite'
 import type { Plugin } from 'vite'
 import react from '@vitejs/plugin-react'
+import { VitePWA } from 'vite-plugin-pwa'
 import fs from 'fs'
 import path from 'path'
 
@@ -56,6 +57,24 @@ function injectEnvToServiceWorker(): Plugin {
 export default defineConfig({
   plugins: [
     react(),
+    VitePWA({
+      // generateSW: Workbox creates a separate sw.js for app-shell precaching.
+      // The existing firebase-messaging-sw.js handles push notifications separately.
+      strategies: 'generateSW',
+      registerType: 'autoUpdate',
+      injectRegister: null,   // we register manually in index.html (firebase-messaging-sw.js)
+      manifest: false,        // use our own public/manifest.json
+      devOptions: { enabled: false },
+      workbox: {
+        // Precache all build output so the app works offline
+        globPatterns: ['**/*.{js,css,html,ico,png,svg,woff2}'],
+        // Don't touch the firebase messaging service worker
+        globIgnores: ['firebase-messaging-sw.js'],
+        // Allow the sw.js file to be served from the root
+        swDest: 'dist/sw.js',
+        navigateFallback: 'index.html',
+      },
+    }),
     injectEnvToServiceWorker()
   ],
   server: {
