@@ -108,32 +108,31 @@ export const useNotifications = () => {
         playNotificationSound();
         if ('vibrate' in navigator) navigator.vibrate([200, 100, 200]);
 
-        const actions: Array<{ action: string; title: string }> =
-          notificationData.type === 'new_assignment' && notificationData.assignmentId
-            ? [{ action: 'accept', title: '✓ Accept' }, { action: 'view', title: '👁 View Details' }]
-            : [{ action: 'view', title: '👁 View' }];
+        // iOS does not support: requireInteraction, actions, badge.
+        // Keep options to the minimum supported subset so iOS doesn't silently drop the notification.
+        const isIOS = /iphone|ipad|ipod/i.test(navigator.userAgent);
+
+        const notificationOptions: NotificationOptions = {
+          body: payload.notification.body,
+          icon: '/pwa-192x192.png',
+          tag: 'church-roster-' + (notificationData.assignmentId || Date.now()),
+          data: { ...notificationData, url: notificationData.assignmentId ? '/my-assignments' : '/', timestamp: Date.now() },
+          ...(isIOS ? {} : {
+            badge: '/pwa-192x192.png',
+            requireInteraction: true,
+            actions: notificationData.type === 'new_assignment' && notificationData.assignmentId
+              ? [{ action: 'accept', title: '✓ Accept' }, { action: 'view', title: '👁 View Details' }]
+              : [{ action: 'view', title: '👁 View' }],
+          }),
+        };
 
         try {
           const registration = await navigator.serviceWorker.ready;
-          await registration.showNotification(payload.notification.title, {
-            body: payload.notification.body,
-            icon: '/icons/icon-192x192.png',
-            badge: '/icons/badge-72x72.png',
-            tag: 'church-roster-' + (notificationData.assignmentId || Date.now()),
-            requireInteraction: true,
-            data: { ...notificationData, url: notificationData.assignmentId ? '/my-assignments' : '/', timestamp: Date.now() },
-            actions,
-          } as ExtendedNotificationOptions);
+          await registration.showNotification(payload.notification.title, notificationOptions as ExtendedNotificationOptions);
           console.log('[NOTIFICATIONS] ✅ Notification shown');
         } catch {
-          // Fallback: basic Notification API
           try {
-            new Notification(payload.notification.title, {
-              body: payload.notification.body,
-              icon: '/icons/icon-192x192.png',
-              tag: 'church-roster-' + (notificationData.assignmentId || Date.now()),
-              requireInteraction: true,
-            });
+            new Notification(payload.notification.title, notificationOptions);
           } catch (fallbackError) {
             console.error('[NOTIFICATIONS] ❌ Fallback notification failed:', fallbackError);
           }

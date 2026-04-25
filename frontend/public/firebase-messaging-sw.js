@@ -27,17 +27,15 @@ messaging.onBackgroundMessage((payload) => {
   // Build notification options with action buttons
   const notificationOptions = {
     body: payload.notification?.body || 'You have a new notification',
-    icon: payload.notification?.icon || '/icons/icon-192x192.png',
-    badge: '/icons/badge-72x72.png',
+    icon: '/pwa-192x192.png',
     tag: 'church-roster-' + (notificationData.assignmentId || Date.now()),
     data: {
       ...notificationData,
       url: notificationData.assignmentId ? `/my-assignments` : '/',
       timestamp: Date.now()
     },
-    requireInteraction: true,
-    silent: false,
-    vibrate: [200, 100, 200], // Vibration pattern for mobile devices
+    // Note: requireInteraction, badge, and actions are NOT set here because
+    // iOS Safari does not support them and will silently drop the notification.
     actions: []
   };
 

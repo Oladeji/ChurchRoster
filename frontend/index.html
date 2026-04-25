@@ -24,18 +24,16 @@
     <div id="root"></div>
     <script type="module" src="/src/main.tsx"></script>
 
-    <!-- Register Firebase Messaging Service Worker (push notifications) -->
+    <!-- Register Firebase Messaging Service Worker.
+         This single SW handles both push notifications (Firebase) and
+         offline caching. iOS requires exactly one SW scope at '/' for
+         push to work — registering a second SW (sw.js) at the same scope
+         causes iOS to silently reject the FCM token. -->
     <script>
       if ('serviceWorker' in navigator) {
-        // Firebase SW — handles push notifications
-        navigator.serviceWorker.register('/firebase-messaging-sw.js')
+        navigator.serviceWorker.register('/firebase-messaging-sw.js', { scope: '/' })
           .then((r) => console.log('Firebase SW registered:', r.scope))
           .catch((e) => console.error('Firebase SW registration failed:', e));
-
-        // Workbox SW — handles offline / app-shell caching (PWA install)
-        navigator.serviceWorker.register('/sw.js')
-          .then((r) => console.log('Workbox SW registered:', r.scope))
-          .catch((e) => console.error('Workbox SW registration failed:', e));
       }
     </script>
   </body>

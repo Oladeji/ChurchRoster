@@ -41,17 +41,34 @@ export const requestNotificationPermission = async (): Promise<string | null> =>
   try {
     const permission = await Notification.requestPermission();
 
-    if (permission === 'granted') {
-      const token = await getToken(messaging, {
-        vapidKey: import.meta.env.VITE_FIREBASE_VAPID_KEY
-      });
-
-      console.log('FCM Token:', token);
-      return token;
-    } else {
+    if (permission !== 'granted') {
       console.log('Notification permission denied');
       return null;
     }
+
+    // On iOS PWA, Firebase MUST receive the exact SW registration that handles
+    // push messages. Passing it explicitly prevents silent token failures when
+    // multiple service workers are registered (e.g. firebase-messaging-sw.js + sw.js).
+    let swRegistration: ServiceWorkerRegistration | undefined;
+    if ('serviceWorker' in navigator) {
+      const registrations = await navigator.serviceWorker.getRegistrations();
+      swRegistration = registrations.find(r =>
+        r.active?.scriptURL.includes('firebase-messaging-sw.js')
+      );
+      if (!swRegistration) {
+        // Not registered yet — register it now and wait for it to activate
+        swRegistration = await navigator.serviceWorker.register('/firebase-messaging-sw.js');
+        await navigator.serviceWorker.ready;
+      }
+    }
+
+    const token = await getToken(messaging, {
+      vapidKey: import.meta.env.VITE_FIREBASE_VAPID_KEY,
+      serviceWorkerRegistration: swRegistration,
+    });
+
+    console.log('FCM Token obtained:', token ? token.substring(0, 20) + '...' : 'null');
+    return token || null;
   } catch (error) {
     console.error('Error getting notification permission:', error);
     return null;
