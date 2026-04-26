@@ -38,7 +38,9 @@ public class NotificationService : INotificationService
 
                 if (!string.IsNullOrEmpty(serviceAccountJson))
                 {
-                    // Option 1: JSON string from environment variable
+                    // Render env vars can corrupt \n in private keys into literal "\n" text.
+                    // Replace escaped newlines back to real newlines so the key parses correctly.
+                    serviceAccountJson = serviceAccountJson.Replace("\\n", "\n");
                     credential = GoogleCredential.FromJson(serviceAccountJson);
                     _logger.LogInformation("Firebase initialized from ServiceAccountJson");
                 }
@@ -316,9 +318,8 @@ public class NotificationService : INotificationService
         }
         catch (FirebaseMessagingException ex)
         {
-            _logger.LogError(ex, "Firebase messaging error: {ErrorCode}", ex.MessagingErrorCode);
+            _logger.LogError(ex, "Firebase messaging error: {ErrorCode} | Message: {Message}", ex.MessagingErrorCode, ex.Message);
 
-            // Handle invalid or expired tokens
             if (ex.MessagingErrorCode == MessagingErrorCode.InvalidArgument ||
                 ex.MessagingErrorCode == MessagingErrorCode.Unregistered)
             {
@@ -329,7 +330,7 @@ public class NotificationService : INotificationService
         }
         catch (Exception ex)
         {
-            _logger.LogError(ex, "Failed to send notification");
+            _logger.LogError(ex, "Failed to send notification: {Message} | InnerException: {Inner}", ex.Message, ex.InnerException?.Message);
             return false;
         }
     }
